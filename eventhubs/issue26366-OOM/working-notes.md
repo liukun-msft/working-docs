@@ -144,7 +144,7 @@ public class Application {
 **Conclusion:** 
 
 - It takes about 15 minutes to consume one million events. 
-- The maximum heap usage only reaches 500MB. But the maximum has increased around 100MB before next major GC? so eventually, it may encounter the OOM issue?
+- The maximum heap usage only reaches 500MB. 
 
 ### Test Case 2: Send one million events every 10 minutes and keep consuming 1 hour (No OOM issue)
 
