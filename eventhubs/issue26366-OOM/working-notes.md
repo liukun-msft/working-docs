@@ -4,9 +4,9 @@
 
 https://github.com/Azure/azure-sdk-for-java/issues/26366
 
-Customer is facing OOM issue after start the spring application with `EventProcessorClient` bean. 
+Customer is facing OOM issue after starting the spring application with `EventProcessorClient` bean. 
 
-Customer has tried to enable/disable "timeout" for batch receive API. But both of them have the OOM issue. 
+Customer has tried to enable/disable "timeout" for batch receive API. But both have the OOM issue. 
 
 Details:
 1. Package information
@@ -20,23 +20,27 @@ Details:
     - The hub keeps the application busy all time, it has usually millions of events to be delivered to the consumers
     - The max heap was set to 4GB (Xmx)
 
-## Reproduce issue - could not reproduce issue now
+## Reproduce issue - could not reproduce now
 
-### Test Case 1: Send one million events and then start application to consume (No OOM issue)
+### Test Case 1: Send one million events first and then start application to consume (No OOM issue)
 
-1. Send enough events to event hub at first
+1.Send enough events to event hub at first - 1000,000 events
 
+Sender.java
 ```Java
-//Sender.java
 public class Sender {
-    private static final String connectionString = "";
+    private static final String connectionString ="";
     private static final String eventHubName = "";
     //Around 3.3kb
     private static final Integer dataSize = 1600;
     //To keep sufficient events in hub
     private static final Integer eventNumber = 1000000;
 
-    public static void main(String[] args) {
+    //Send times configuration
+    private static final Integer sendTimes = 1;
+    private static final Integer sendInternal = 10 * 60 * 1000; //10 minutes
+
+    public static void main(String[] args) throws InterruptedException {
         EventHubProducerClient producer = new EventHubClientBuilder()
                 .connectionString(connectionString, eventHubName)
                 .buildProducerClient();
@@ -48,7 +52,15 @@ public class Sender {
         for (int i = 0; i < eventNumber; i++) {
             allEvents.add(new EventData(body));
         }
-        
+
+        for(int i = 0; i < sendTimes; i++){
+            sendData(producer, allEvents);
+            Thread.sleep(sendInternal);
+        }
+        producer.close();
+    }
+
+    private static void sendData(EventHubProducerClient producer, List<EventData> allEvents){
         EventDataBatch eventDataBatch = producer.createBatch();
         for (EventData eventData : allEvents) {
             if (!eventDataBatch.tryAdd(eventData)) {
@@ -64,16 +76,15 @@ public class Sender {
         if (eventDataBatch.getCount() > 0) {
             producer.send(eventDataBatch);
         }
-        producer.close();
     }
 }
 ```
 
 
-2. Start Spring application with `EventProcessorClient` Bean
+2.Start Spring application with `EventProcessorClient` Bean
 
+EventHubsClientConfiguration.java
 ```Java
-//EventHubsClientConfiguration.java
 @Configuration
 public class EventHubsClientConfiguration {
     private static final String eventHubconnectionString = "";
@@ -112,8 +123,10 @@ public class EventHubsClientConfiguration {
         };
     }
 }
+```
 
-//Application.java
+Application.java
+```Java
 @SpringBootApplication
 public class Application {
 	public static void main(String[] args) {
@@ -123,7 +136,7 @@ public class Application {
 ```
 
 
-3. Monitor Heap usage (15 minutes)
+3.Monitor Heap usage (15 minutes)
 
 ![](./1-sent-million-then-consume.PNG)
 
@@ -131,69 +144,21 @@ public class Application {
 **Conclusion:** 
 
 - It takes about 15 minutes to consume one million events. 
-- The maximum heap usage only reach 500MB. But the maximum have increased around 100MB before next major GC? so eventually, it may encounter the OOM issue?
+- The maximum heap usage only reaches 500MB. But the maximum has increased around 100MB before next major GC? so eventually, it may encounter the OOM issue?
 
 ### Test Case 2: Send one million events every 10 minutes and keep consuming 1 hour (No OOM issue)
 
-1. Run Sender class to send one millon events every 10 minutes
+1.Run Sender class to send one million events every 10 minutes
+
+Change `sendTimes` to a bigger value in Sender.java, for example:
 
 ```Java
-//Sender.java
-public class Sender {
-    private static final String connectionString = "";
-    private static final String eventHubName = "";
-    //Around 3.3kb
-    private static final Integer dataSize = 1600;
-    //To keep sufficient events in hub
-    private static final Integer eventNumber = 1000000;
-
-    private static final Integer sendTimes = 6;
-    private static final Integer sendInternal = 10 * 60 * 1000; //10 minutes
-
-    public static void main(String[] args) throws InterruptedException {
-        EventHubProducerClient producer = new EventHubClientBuilder()
-                .connectionString(connectionString, eventHubName)
-                .buildProducerClient();
-
-        char[] data = new char[dataSize];
-        String body = new String(data);
-
-        List<EventData> allEvents = new ArrayList<>();
-        for (int i = 0; i < eventNumber; i++) {
-            allEvents.add(new EventData(body));
-        }
-
-        //Send time is one hour
-        for(int i = 0; i < sendTimes; i++){
-            sendData(producer, allEvents);
-            Thread.sleep(sendInternal);
-        }
-//        producer.close();
-    }
-
-    private static void sendData(EventHubProducerClient producer, List<EventData> allEvents){
-        EventDataBatch eventDataBatch = producer.createBatch();
-        for (EventData eventData : allEvents) {
-            if (!eventDataBatch.tryAdd(eventData)) {
-                producer.send(eventDataBatch);
-                eventDataBatch = producer.createBatch();
-
-                if (!eventDataBatch.tryAdd(eventData)) {
-                    throw new IllegalArgumentException("Event is too large for an empty batch. Max size: "
-                            + eventDataBatch.getMaxSizeInBytes());
-                }
-            }
-        }
-        if (eventDataBatch.getCount() > 0) {
-            producer.send(eventDataBatch);
-        }
-    }
-}
+private static final Integer sendTimes = 6;
 ```
 
-2. Start Spring application with `EventProcessorClient` Bean
+2.Start Spring application with `EventProcessorClient` Bean
 
-3. Monitor Heap Usage (1 Hour)
+3.Monitor Heap Usage (1 Hour)
 
 ![](./2-continuous-sent-million-events.PNG)
 
@@ -204,16 +169,17 @@ public class Sender {
 
 ### Test Case 3: Process with timeout enabled (No OOM issue)
 
-1. Send enough events to event hub at first 
-2. Start Spring application with `EventProcessorClient` Bean and **timeout enabled**
+1.Send enough events to event hub at first 
+2.Start Spring application with `EventProcessorClient` Bean and **timeout enabled**
 
+Update `processEventBatch()` configuration
 ```Java
 .processEventBatch(getBatchEvents(), 1000, Duration.of(5, ChronoUnit.SECONDS))
 ```
 
-3. Monitor Heap Usage (10 minutes)
+3.Monitor Heap Usage (10 minutes)
 
 ![](./3-sent-million-with-timeout.PNG)
 
 **Conclusion:**
-- Heap usage looks good even for timeout feature?
+- Heap usage looks good even for timeout feature.
