@@ -6,7 +6,7 @@ https://github.com/Azure/azure-sdk-for-java/issues/26366
 
 Customer is facing OOM issue after start the spring application with `EventProcessorClient` bean. 
 
-Customer has tried to enable/disable "timeout" for batch receive API. But both have OOM issue. 
+Customer has tried to enable/disable "timeout" for batch receive API. But both of them have the OOM issue. 
 
 Details:
 1. Package information
@@ -20,9 +20,10 @@ Details:
     - The hub keeps the application busy all time, it has usually millions of events to be delivered to the consumers
     - The max heap was set to 4GB (Xmx)
 
-## Reproduce issue
+## Reproduce issue - could not reproduce issue now
 
-#### Test Case 1: Send one million events and then start application to consume (No OOM issue)
+### Test Case 1: Send one million events and then start application to consume (No OOM issue)
+
 1. Send enough events to event hub at first
 
 ```Java
@@ -122,17 +123,17 @@ public class Application {
 ```
 
 
-3. Monitor Heap usage
+3. Monitor Heap usage (15 minutes)
 
 ![](./1-sent-million-then-consume.PNG)
 
 
-Conclusion: 
+**Conclusion:** 
 
 - It takes about 15 minutes to consume one million events. 
 - The maximum heap usage only reach 500MB. But the maximum have increased around 100MB before next major GC? so eventually, it may encounter the OOM issue?
 
-#### Test Case 2: Send one million events every 10 minutes and keep consuming 1 hour (No OOM issue)
+### Test Case 2: Send one million events every 10 minutes and keep consuming 1 hour (No OOM issue)
 
 1. Run Sender class to send one millon events every 10 minutes
 
@@ -192,16 +193,16 @@ public class Sender {
 
 2. Start Spring application with `EventProcessorClient` Bean
 
-3. Monitor Heap Usage
+3. Monitor Heap Usage (1 Hour)
 
 ![](./2-continuous-sent-million-events.PNG)
 
-Conclusion: 
+**Conclusion:** 
 
 - The maximum heap usage is around 750MB and is stable after some time. 
 - The trend in graph is not same as the user provided.
 
-#### Test Case 3: Process with timeout enabled
+### Test Case 3: Process with timeout enabled (No OOM issue)
 
 1. Send enough events to event hub at first 
 2. Start Spring application with `EventProcessorClient` Bean and **timeout enabled**
@@ -210,8 +211,9 @@ Conclusion:
 .processEventBatch(getBatchEvents(), 1000, Duration.of(5, ChronoUnit.SECONDS))
 ```
 
-3. Monitor Heap Usage
+3. Monitor Heap Usage (10 minutes)
 
 ![](./3-sent-million-with-timeout.PNG)
 
-Looks good? Why there is issue compare to the customer's screenshot?
+**Conclusion:**
+- Heap usage looks good even for timeout feature?
