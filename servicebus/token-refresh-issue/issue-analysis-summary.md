@@ -5,11 +5,12 @@
 >**Error log:** 
 *com.azure.core.amqp.implementation.ActiveClientTokenManager: {reactor-executor-8} Error occurred while refreshing token that is not retriable. Not scheduling refresh task. Use ActiveClientTokenManager.authorize() to schedule task again. **audience scopes period >= 0 required but it was -1473349684000000000***
 
-This error is coming from the constructor of `FluxInterval`, which is called along the path from `ActiveClientTokenManager#scheduleRefreshTokenTask()` in below ([Code link]( https://github.com/Azure/azure-sdk-for-java/blob/main/sdk/core/azure-core-amqp/src/main/java/com/azure/core/amqp/implementation/ActiveClientTokenManager.java#L130)):
+This error is coming from the constructor of `FluxInterval`, which is called along the path from `ActiveClientTokenManager#scheduleRefreshTokenTask()` in below :
 
 ```Java
  return Flux.switchOnNext(durationSource.asFlux().map(Flux::interval))
 ```
+[Code link](https://github.com/Azure/azure-sdk-for-java/blob/main/sdk/core/azure-core-amqp/src/main/java/com/azure/core/amqp/implementation/ActiveClientTokenManager.java#L130)
 
 Somehow the `durationSource` emited a negative refresh interval, and `FluxInteval` received as `period`, so it will throw out this error.
 
@@ -25,19 +26,20 @@ So we need to ananlysis why here refresh interval is negative.
 
 ## Analysis why refresh interval is a negative value
 
-The `ActiveClientTokenManager#authorize()` will calculate the refresh interval based on the expiration time of AccessToken i.e. `expireOn` below, [Code link](https://github.com/Azure/azure-sdk-for-java/blob/8a507b4922a5498ab3b8a28bc811bbf8d2102912/sdk/core/azure-core-amqp/src/main/java/com/azure/core/amqp/implementation/ActiveClientTokenManager.java#L72-L96). 
+The `ActiveClientTokenManager#authorize()` will calculate the refresh interval based on the expired time of AccessToken i.e. `expireOn` below:
 
 ```java
 final Duration between = Duration.between(OffsetDateTime.now(ZoneOffset.UTC), expiresOn);
 final long refreshSeconds = (long) Math.floor(between.getSeconds() * 0.9);
 final long refreshIntervalMS = refreshSeconds * 1000;
 ```
+ [Code link](https://github.com/Azure/azure-sdk-for-java/blob/8a507b4922a5498ab3b8a28bc811bbf8d2102912/sdk/core/azure-core-amqp/src/main/java/com/azure/core/amqp/implementation/ActiveClientTokenManager.java#L72-L96)
 
 There may be two reason would cause refresh interval to be negative:   
-1. duration could be negative when `OffsetDateTime.now` is later than `expiresOn`
+1. `between` could be negative when `OffsetDateTime.now` is later than `expiresOn`
 2. data overflow
 
-And the first one is more likely to occur since there is no date checking for `expiresOn` here. So we could test different expiresOn and find **When expireOn is EpochSecond (1970-01-01), it will throw out the same exception.**
+The first one is more likely to occur since there is no date checking for `expiresOn` here. So we could test with different `expiresOn` value and **find when expireOn is EpochSecond (1970-01-01), it will throw out the same exception.**
 
 Test code:
 ```Java
@@ -72,7 +74,8 @@ Exception in thread "main" java.lang.IllegalArgumentException: period >= 0 requi
 The negative value here is very close (I am using `OffsetDateTime.now(ZoneOffset.UTC)`) which can prove that in when `expireOn` is  `EpochSecond`, the service will encounter this error.
 
 
-So how could expiration date is EpochSecond in AccessToken? Currently I only suspect when service bus are using sharedAccessSignature and somehow `expirationTimeStr` is "0" or small value, so `epochSecond` was parsed as zero or very small valid value.This wold make the token expire date to be 1970-01-01. [Code Link](https://github.com/Azure/azure-sdk-for-java/blob/main/sdk/servicebus/azure-messaging-servicebus/src/main/java/com/azure/messaging/servicebus/implementation/ServiceBusSharedKeyCredential.java#L195-L196 )
+**So how could the expired date be set as EpochSecond(1970-01-01) in AccessToken?** 
+Currently I suspect when service bus are using sharedAccessSignature and somehow `expirationTimeStr` is "0" or small value, `epochSecond` will be parsed as zero or very small valid value which make the token expired date to be 1970-01-01. 
 
 ```Java
 expirationTimeStr -> {
@@ -81,9 +84,22 @@ expirationTimeStr -> {
         return Instant.ofEpochSecond(epochSeconds).atOffset(ZoneOffset.UTC);
     } 
 ```
+[Code Link](https://github.com/Azure/azure-sdk-for-java/blob/main/sdk/servicebus/azure-messaging-servicebus/src/main/java/com/azure/messaging/servicebus/implementation/ServiceBusSharedKeyCredential.java#L195-L196 )
 
 
-TODO:
 
-Ehance the date checking, which behavior?
+**Next steps:**
 
+1. Keep checking the code to analysis root cause 
+
+2. Wait more logs and reproduce the issue
+
+3. Add check for `between` to prevent negative value and logging detailed error
+
+```Java
+final Duration between = Duration.between(OffsetDateTime.now(ZoneOffset.UTC), expiresOn);
+if (between.getSeconds() < 0) {
+        logger.error("...");
+        throw AmqpException("...");
+}
+``` 
