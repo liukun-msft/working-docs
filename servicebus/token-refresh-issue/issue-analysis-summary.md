@@ -2,17 +2,19 @@
 
 ## Issue details
 
->**Error log:** 
-*com.azure.core.amqp.implementation.ActiveClientTokenManager: {reactor-executor-8} Error occurred while refreshing token that is not retriable. Not scheduling refresh task. Use ActiveClientTokenManager.authorize() to schedule task again. **audience scopes period >= 0 required but it was -1473349684000000000***
+**Error log:** 
+>*com.azure.core.amqp.implementation.ActiveClientTokenManager: {reactor-executor-8} Error occurred while refreshing token that is not retriable. Not scheduling refresh task. Use ActiveClientTokenManager.authorize() to schedule task again. **audience scopes period >= 0 required but it was -1473349684000000000***
 
-This error is coming from the constructor of `FluxInterval`, which is called along the path from `ActiveClientTokenManager#scheduleRefreshTokenTask()` in below :
+
+
+Base on the error message, the error is coming from the constructor of `FluxInterval`, which is called along the path from `ActiveClientTokenManager` in below line:
 
 ```Java
  return Flux.switchOnNext(durationSource.asFlux().map(Flux::interval))
 ```
 [Code link](https://github.com/Azure/azure-sdk-for-java/blob/main/sdk/core/azure-core-amqp/src/main/java/com/azure/core/amqp/implementation/ActiveClientTokenManager.java#L130)
 
-Somehow the `durationSource` emited a negative refresh interval, and `FluxInteval` received as `period`, so it will throw out this error.
+Somehow the `durationSource` emited a negative refresh interval, and `FluxInteval` received as `period`, so it would throw out this error.
 
 ```Java
 FluxInterval(long initialDelay, long period, TimeUnit unit, Scheduler timedScheduler) {
@@ -22,7 +24,7 @@ FluxInterval(long initialDelay, long period, TimeUnit unit, Scheduler timedSched
     ...
 ```
 
-So we need to ananlysis why here refresh interval is negative.
+So we need to ananlysis why refresh interval is negative.
 
 ## Analysis why refresh interval is a negative value
 
@@ -35,11 +37,13 @@ final long refreshIntervalMS = refreshSeconds * 1000;
 ```
  [Code link](https://github.com/Azure/azure-sdk-for-java/blob/8a507b4922a5498ab3b8a28bc811bbf8d2102912/sdk/core/azure-core-amqp/src/main/java/com/azure/core/amqp/implementation/ActiveClientTokenManager.java#L72-L96)
 
-There may be two reason would cause refresh interval to be negative:   
-1. `between` could be negative when `OffsetDateTime.now` is later than `expiresOn`
+There are two reasons which may cause the refresh interval to be negative:   
+1. The value of `between` would be negative when `OffsetDateTime.now` is later than `expiresOn`
 2. data overflow
 
-The first one is more likely to occur since there is no date checking for `expiresOn` here. So we could test with different `expiresOn` value and **find when expireOn is EpochSecond (1970-01-01), it will throw out the same exception.**
+The first one is more likely to occur since there is no date checking for `expiresOn`. So we could test with different `expiresOn` values. 
+
+**We find when expireOn is EpochSecond (1970-01-01), it wil make the refresh interval negative and throw out the same exception.**
 
 Test code:
 ```Java
@@ -92,14 +96,14 @@ expirationTimeStr -> {
 
 1. Keep checking the code to analysis root cause 
 
-2. Wait more logs and reproduce the issue
+2. Wait for more detailed logs and reproduce the issue
 
-3. Add check for `between` to prevent negative value and logging detailed error
+3. Enhance code by adding check for the value of `between` to prevent negative value and logging detailed error, like:
 
-```Java
-final Duration between = Duration.between(OffsetDateTime.now(ZoneOffset.UTC), expiresOn);
-if (between.getSeconds() < 0) {
-        logger.error("...");
-        throw AmqpException("...");
-}
-``` 
+    ```Java
+    final Duration between = Duration.between(OffsetDateTime.now(ZoneOffset.UTC), expiresOn);
+    if (between.getSeconds() < 0) {
+            logger.error("...");
+            throw AmqpException("...");
+    }
+    ``` 
