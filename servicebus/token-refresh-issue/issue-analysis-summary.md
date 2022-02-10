@@ -121,4 +121,4 @@ AmqpException: status-code: 401, status-description: ExpiredToken: The token is 
 
 Test Conclusion: the expiration time in token is not possible to be set as 0, otherwise it will not pass the authentication. 
 
-It is very weird to got this error, maybe it because multi-thread and the token expiration time couldn't set correctly?
+It is very weird to got this error, maybe it because multi-thread or clock skew and the token expiration time couldn't set correctly?
