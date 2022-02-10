@@ -77,9 +77,9 @@ Exception in thread "main" java.lang.IllegalArgumentException: period >= 0 requi
 
 The negative value here is very close (I am using `OffsetDateTime.now(ZoneOffset.UTC)`) which can prove that in when `expireOn` is  `EpochSecond`, the service will encounter this error.
 
+ ### So how could the expired date be set as EpochSecond(1970-01-01) in AccessToken? 
 
-**So how could the expired date be set as EpochSecond(1970-01-01) in AccessToken?** 
-Currently I suspect when service bus are using sharedAccessSignature and somehow `expirationTimeStr` is "0" or small value, `epochSecond` will be parsed as zero or very small valid value which make the token expired date to be 1970-01-01. 
+**Test scenario 1:** Check when service bus are using sharedAccessSignature and somehow `expirationTimeStr` is "0", `epochSecond` will be parsed as zero which make the token expired date to be 1970-01-01. 
 
 ```Java
 expirationTimeStr -> {
@@ -91,19 +91,34 @@ expirationTimeStr -> {
 [Code Link](https://github.com/Azure/azure-sdk-for-java/blob/main/sdk/servicebus/azure-messaging-servicebus/src/main/java/com/azure/messaging/servicebus/implementation/ServiceBusSharedKeyCredential.java#L195-L196 )
 
 
+Test: Create a customized signature which expiration time is 0, and send it out
 
-**Next steps:**
+```java
+public void run() {
+    AzureSasCredential credential = new AzureSasCredential(Credentials.serviceBusSignature);
 
-1. Keep checking the code to analysis root cause 
+    ServiceBusSenderClient sender = new ServiceBusClientBuilder()
+            .credential(Credentials.serviceBusNamespace, credential)
+            .sender()
+            .queueName(Credentials.serviceBusQueue)
+            .buildClient();
 
-2. Wait for more detailed logs and reproduce the issue
+    List<ServiceBusMessage> messages = Arrays.asList(
+            new ServiceBusMessage("Hello world").setMessageId("1"),
+            new ServiceBusMessage("Bonjour").setMessageId("2"));
 
-3. Enhance code by adding check for the value of `between` to prevent negative value and logging detailed error, like:
+    sender.sendMessages(messages);
 
-    ```Java
-    final Duration between = Duration.between(OffsetDateTime.now(ZoneOffset.UTC), expiresOn);
-    if (between.getSeconds() < 0) {
-            logger.error("...");
-            throw AmqpException("...");
-    }
-    ``` 
+    sender.close();
+}
+```
+
+It will recevie a 401 response:
+
+```
+AmqpException: status-code: 401, status-description: ExpiredToken: The token is expired. Expiration time: '1970-01-01 00:00:00Z'
+```
+
+Test Conclusion: the expiration time in token is not possible to be set as 0, otherwise it will not pass the authentication. 
+
+It is very weird to got this error, maybe it because multi-thread and the token expiration time couldn't set correctly?
