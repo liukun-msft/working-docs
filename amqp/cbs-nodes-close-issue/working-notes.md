@@ -70,7 +70,7 @@ Create a client(e.g. producer), send message and close it after commpleted.
 
 **Reason**
 
-When cbs node is closed, its `close()` method will call `requestUpStream()` to emit a new channel immediately. So that `AmqpChannelProccor#onNext()`  is triggered and inside this method, it call cbs node `close()` method again, which cause an infinite loop of channel's opening and closing.
+When cbs node is closed, its `close()` method will call `requestUpStream()` to emit a new channel immediately. So that `AmqpChannelProcessor#onNext()`  is triggered and inside this method, it call cbs node `close()` method again, which cause an infinite loop of channel's opening and closing.
 
 The `requestUpStream()` was added from PR [#22534](https://github.com/Azure/azure-sdk-for-java/pull/22534) to fix issue [#22533](https://github.com/Azure/azure-sdk-for-java/issues/22533).
 
@@ -87,7 +87,7 @@ private void onTerminalState() {
     endpointStates.emitComplete(((signalType, emitResult) -> onEmitSinkFailure(...)));
 ```
 
-The complete signal is catched by `AmqpChannelProccor#connectionSubscription`. Because channel status is not disposed currently, it goes to `AmqpChannelProccor#setAndClearChannel()` which actually close this channel, and then goes to `AmqpChannelProccor#requestUpstream()`.
+The complete signal is catched by `AmqpChannelProcessor#connectionSubscription`. Because channel status is not disposed currently, it goes to `AmqpChannelProcessor#setAndClearChannel()` which actually close this channel, and then goes to `AmqpChannelProcessor#requestUpstream()`.
 
 ```Java
 endpointStatesFunction.apply(amqpChannel).subscribe(
@@ -104,7 +104,7 @@ endpointStatesFunction.apply(amqpChannel).subscribe(
     });
 ```
 
-Inside `AmqpChannelProccor#requestUpstream()`, it request a new channel.
+Inside `AmqpChannelProcessor#requestUpstream()`, it request a new channel.
 
 ```Java
  private void requestUpstream() {
@@ -117,7 +117,7 @@ Inside `AmqpChannelProccor#requestUpstream()`, it request a new channel.
 
 ```
 
-Because CBS channel is requested from a repeat Flux inside `ReactorConnection#createRequestResponseChannel()`, so a new channel could emit immediately and call `AmqpChannelProccor#onNext()`.
+Because CBS channel is requested from a repeat Flux inside `ReactorConnection#createRequestResponseChannel()`, so a new channel could emit immediately and call `AmqpChannelProcessor#onNext()`.
 
 ```Java
 protected AmqpChannelProcessor<RequestResponseChannel> createRequestResponseChannel(
@@ -146,7 +146,7 @@ public void onNext(T amqpChannel) {
 }
 ```
 
-And `AmqpChannelProccor#close()` will call `RequestResponseChannel#closeAysnc()`, which form an infinite loop for cbs channel. 
+And `AmqpChannelProcessor#close()` will call `RequestResponseChannel#closeAysnc()`, which form an infinite loop for cbs channel. 
 ```Java
 private void close(T channel) {
     if (channel instanceof AsyncCloseable) {
@@ -157,12 +157,12 @@ private void close(T channel) {
 And we could see the same logs to prove the behavior:
 
 ```
-Setting next AMQP channel. // AmqpChannelProccor#onNext()
+Setting next AMQP channel. // AmqpChannelProcessor#onNext()
 Next AMQP channel received...
 Sender link was never active. Closing endpoint states. //close()
 Receiver link was never active. Closing endpoint states. //close()
-Channel is closed. Requesting upstream. //AmqpChannelProccor#connectionSubscription.onComplete()
-Connection not requested, yet. Requesting one. // AmqpChannelProccor#requestUpstream()
+Channel is closed. Requesting upstream. //AmqpChannelProcessor#connectionSubscription.onComplete()
+Connection not requested, yet. Requesting one. // AmqpChannelProcessor#requestUpstream()
 Setting next AMQP channel.
 ...
 
@@ -176,6 +176,6 @@ Setting next AMQP channel.
 
 **Current Solution**
 
-Revert the change to add `requestUpStream()`.
+Revert the change in PR #22534 to fix this issue.
 
 Figure out the reason for issue [#22533](https://github.com/Azure/azure-sdk-for-java/issues/22533)
