@@ -1,181 +1,245 @@
 # Only emit AMQP channels downstream when they are active #24582
 
-## Issue Description
+## Issue
 
 https://github.com/Azure/azure-sdk-for-java/issues/24582
 
 **Behavior**
 
-When the CBS node is closed, it'll make a request upstream for a new instance. This instance is immediately emitted even if it's not active. This should alleviate the mass of logs accumulated about retries and fix retry policy-related issues.
+When the CBS node (ClaimsBasedSecurityNode) is closed, it'll make a request upstream for a new channel(RequestResponseChannel). This channel is immediately emitted. As connection is inactive, it is closed then and request a upstream again. The CBS node constantly retry process cause mass of logs.
 
-**logs**
+**Related issue or changes**
 
-```
-11:39:05.524 [main] INFO  com.azure.messaging.eventhubs.implementation.EventHubConnectionProcessor - Upstream connection publisher was completed. Terminating processor.
-11:39:05.524 [main] INFO  com.azure.messaging.eventhubs.implementation.EventHubConnectionProcessor - namespace[eventhubs-liuku.servicebus.windows.net] entityPath[eventhub-test]: AMQP channel processor completed. Notifying 0 subscribers.
-11:39:05.525 [main] INFO  com.azure.core.amqp.implementation.ReactorConnection - connectionId[MF_e2b73b_1646192276393] signal[Disposed by client., isTransient[false], initiatedByClient[true]]: Disposing of ReactorConnection.
-11:39:05.525 [main] INFO  com.azure.messaging.eventhubs.implementation.EventHubConnectionProcessor - namespace[eventhubs-liuku.servicebus.windows.net] entityPath[eventhub-test]: Channel is disposed.
-11:39:05.818 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.handler.SessionHandler - onSessionRemoteClose connectionId[eventhub-test], entityName[MF_e2b73b_1646192276393], condition[Error{condition=null, description='null', info=null}]
-11:39:05.818 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.handler.SessionHandler - onSessionRemoteClose connectionId[cbs-session], entityName[MF_e2b73b_1646192276393], condition[Error{condition=null, description='null', info=null}]
-11:40:05.541 [parallel-8] INFO  com.azure.core.amqp.implementation.RequestResponseChannel - connectionId[MF_e2b73b_1646192276393] linkName[cbs] Timed out waiting for RequestResponseChannel to complete closing. Manually closing.
-11:40:05.541 [parallel-7] INFO  com.azure.core.amqp.implementation.RequestResponseChannel - connectionId[MF_e2b73b_1646192276393] linkName[cbs] Timed out waiting for RequestResponseChannel to complete closing. Manually closing.
-11:40:05.541 [parallel-8] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Channel is closed. Requesting upstream. 
-11:40:05.542 [parallel-8] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Connection not requested, yet. Requesting one.
-11:40:05.543 [parallel-8] INFO  com.azure.core.amqp.implementation.ReactorConnection - connectionId[MF_e2b73b_1646192276393] entityPath[$cbs] linkName[cbs] Emitting new response channel.
-11:40:05.543 [parallel-8] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Setting next AMQP channel.
-11:40:05.543 [parallel-8] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Next AMQP channel received, updating 3 current subscribers
-11:40:05.543 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.handler.SendLinkHandler - connectionId[MF_e2b73b_1646192276393] linkName[cbs] entityPath[$cbs] Sender link was never active. Closing endpoint states.
-11:40:05.545 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.handler.ReceiveLinkHandler - connectionId[MF_e2b73b_1646192276393] linkName[cbs] entityPath[$cbs] Receiver link was never active. Closing endpoint states.
-11:40:05.545 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Channel is closed. Requesting upstream. 
-11:40:05.546 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Connection not requested, yet. Requesting one.
-11:40:05.546 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.ReactorConnection - connectionId[MF_e2b73b_1646192276393] entityPath[$cbs] linkName[cbs] Emitting new response channel.
-11:40:05.546 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Setting next AMQP channel.
-11:40:05.547 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Next AMQP channel received, updating 3 current subscribers
-11:40:05.548 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.ReactorConnection - connectionId[MF_e2b73b_1646192276393] Closing executor.
-11:40:05.548 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.handler.ConnectionHandler - onConnectionLocalClose connectionId[MF_e2b73b_1646192276393] hostname[eventhubs-liuku.servicebus.windows.net] errorCondition[null] errorDescription[null]
-11:40:05.548 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.handler.SendLinkHandler - connectionId[MF_e2b73b_1646192276393] linkName[cbs] entityPath[$cbs] Sender link was never active. Closing endpoint states.
-11:40:05.548 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.handler.ReceiveLinkHandler - connectionId[MF_e2b73b_1646192276393] linkName[cbs] entityPath[$cbs] Receiver link was never active. Closing endpoint states.
-11:40:05.549 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Channel is closed. Requesting upstream. 
-11:40:05.549 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Connection not requested, yet. Requesting one.
-11:40:05.549 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.ReactorConnection - connectionId[MF_e2b73b_1646192276393] entityPath[$cbs] linkName[cbs] Emitting new response channel.
-11:40:05.549 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Setting next AMQP channel.
-11:40:05.550 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Next AMQP channel received, updating 3 current subscribers
-11:40:05.550 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.handler.SendLinkHandler - connectionId[MF_e2b73b_1646192276393] linkName[cbs] entityPath[$cbs] Sender link was never active. Closing endpoint states.
-11:40:05.550 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.handler.ReceiveLinkHandler - connectionId[MF_e2b73b_1646192276393] linkName[cbs] entityPath[$cbs] Receiver link was never active. Closing endpoint states.
-11:40:05.551 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Channel is closed. Requesting upstream. 
-11:40:05.551 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Connection not requested, yet. Requesting one.
-11:40:05.551 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.ReactorConnection - connectionId[MF_e2b73b_1646192276393] entityPath[$cbs] linkName[cbs] Emitting new response channel.
-11:40:05.552 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Setting next AMQP channel.
-11:40:05.552 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Next AMQP channel received, updating 3 current subscribers
-11:40:05.552 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.handler.SendLinkHandler - connectionId[MF_e2b73b_1646192276393] linkName[cbs] entityPath[$cbs] Sender link was never active. Closing endpoint states.
-11:40:05.552 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.handler.ReceiveLinkHandler - connectionId[MF_e2b73b_1646192276393] linkName[cbs] entityPath[$cbs] Receiver link was never active. Closing endpoint states.
-11:40:05.553 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Channel is closed. Requesting upstream. 
-11:40:05.553 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Connection not requested, yet. Requesting one.
-11:40:05.554 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.ReactorConnection - connectionId[MF_e2b73b_1646192276393] entityPath[$cbs] linkName[cbs] Emitting new response channel.
-11:40:05.554 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Setting next AMQP channel.
-11:40:05.554 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Next AMQP channel received, updating 3 current subscribers
-11:40:05.555 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.handler.SendLinkHandler - connectionId[MF_e2b73b_1646192276393] linkName[cbs] entityPath[$cbs] Sender link was never active. Closing endpoint states.
-11:40:05.555 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.handler.ReceiveLinkHandler - connectionId[MF_e2b73b_1646192276393] linkName[cbs] entityPath[$cbs] Receiver link was never active. Closing endpoint states.
-11:40:05.555 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Channel is closed. Requesting upstream. 
-11:40:05.555 [reactor-executor-1] INFO  com.azure.core.amqp.implementation.RequestResponseChannel:$cbs - namespace[MF_e2b73b_1646192276393] entityPath[$cbs]: Connection not requested, yet. Requesting one.
-...
-```
+- Message receiving is stuck because AMQP connection is closed without an error
+https://github.com/Azure/azure-sdk-for-java/issues/22533
+https://github.com/Azure/azure-sdk-for-java/pull/22534
 
-## Root cause analysis
+- Add timeout to cleaning up sender/receiver links
+https://github.com/Azure/azure-sdk-for-java/pull/23381
 
-**Repro**
+### Logs
 
-Create a client(e.g. producer), send message and close it after commpleted.
+[Client closing logs](./logs.md)
 
+We can define 5 phases for the closing logs:
+
+1. Connection start to close
+2. CBS node start to close
+3. CBS node close timeout exception
+4. CBS node constantly retry logs 
+5. ReactorExecutor closed
+
+### Call graph 
+
+**CBS node start to close and timeout exception**
+
+![img](./cbs-close-issue-1.jpg)
+
+**CBS node constantly retry and ReactorExecutor closed**
+
+![img](./cbs-close-issue-2.jpg)
+
+
+## Analysis issues
+
+### Issue 1: Two threads are created to close CBS node
 
 **Reason**
 
-When cbs node is closed, its `close()` method will call `requestUpStream()` to emit a new channel immediately. So that `AmqpChannelProcessor#onNext()`  is triggered and inside this method, it call cbs node `close()` method again, which cause an infinite loop of channel's opening and closing.
+AmpqShutdownSigal catched by `RequestResponseChannel#amqpConnection`, which cause the duplicate close action for CBS node.  
 
-The `requestUpStream()` was added from PR [#22534](https://github.com/Azure/azure-sdk-for-java/pull/22534) to fix issue [#22533](https://github.com/Azure/azure-sdk-for-java/issues/22533).
+```Java
+...
+//RequestResponseChannel
+this.subscriptions = Disposables.composite(
+    ...
+    //TODO (conniey): Do we need this if we already close the request response nodes when the
+    // connection.closeWork is executed? It would be preferred to get rid of this circular dependency.
+    amqpConnection.getShutdownSignals().next().flatMap(signal -> {
+        logger.verbose("Shutdown signal received.");
+        return closeAsync();
+    }).subscribe()
+);
+```
+
+When connection close (`ReactorConnection#closeAsync`), it will explictly close `cbsChannelProcessor`.
+
+```Java
+//ReactorConnection
+Mono<Void> closeAsync(AmqpShutdownSignal shutdownSignal){
+    ...
+    if (cbsChannelProcessor != null) {
+        cbsCloseOperation = cbsChannelProcessor.flatMap(channel -> channel.closeAsync());
+    } 
+    ....
+ }
+```
+### Issue 2: CBS node close timeout exception
+
+**Reason**
+
+No `closeMono` complete signal has been received after `RequestResponseChannel#closeAsync` was called.
+
+```Java
+//RequestResponseChannel
+final Mono<Void> closeOperationWithTimeout = closeMono.asMono()
+        .timeout(retryOptions.getTryTimeout())
+        .onErrorResume(TimeoutException.class, error -> {
+                ...
+            });
+        })
+        .subscribeOn(Schedulers.boundedElastic());
+```
+This is because when the first time of `sendLink.close()` and `receiveLink.close()` been called, it won't emit complete signal when link is remoteActive. So the `sendLinkHandler` and `receiveLinkHandler` couldn't go through complete method to send out `closeMono`.  
+
+**Code Details**
+
+When `RequestResponseChannel#closeAsync` is called, it will schedule `sendLink.close()` and `receiveLink.close()` tasks.
+
+``` Java
+//RequestResponseChannel
+public Mono<Void> closeAsync() {
+   ...
+    logger.verbose("Closing request/response channel.");
+    return Mono.fromRunnable(() -> {
+        try {
+            // Schedule API calls on proton-j entities on the ReactorThread associated with the connection.
+            provider.getReactorDispatcher().invoke(() -> {
+                logger.verbose("Closing send link and receive link.");
+
+                sendLink.close();
+                receiveLink.close();
+            }
+            ...
+```
+
+And when `sendLink.close()` and `receiveLink.close()` tasks run, it will check if `isRemoveActive`. Only when value if false, it will call `super.close()` to emit a complete signal. （For the first time, the `isRemoteActive` may be true - need verify）
+
+```Java
+//SendLinkHandler and ReceiverLinkHandler
+public void onLinkLocalClose(Event event) {
+    super.onLinkLocalClose(event);
+    if (!isRemoteActive.get()) {
+        ...
+        super.close();
+    }
+}
+```
+**Expected behavior**
+
+The link should emit a complete signal when it is closed, the `receiveLinkHandler` and `sendLinkHandler` can catch that and call `RequestResponseChannel#onTerminalState()` twice.
+
+```Java
+//RequestResponseChannel
+receiveLinkHandler.getEndpointStates().subscribe(state -> {
+    updateEndpointState(null, AmqpEndpointStateUtil.getConnectionState(state));
+}, ...
+() -> {
+    closeAsync().subscribe();
+    onTerminalState("ReceiveLinkHandler");
+}),
+
+sendLinkHandler.getEndpointStates().subscribe(state -> {
+    updateEndpointState(AmqpEndpointStateUtil.getConnectionState(state), null);
+}, ...
+() -> {
+    closeAsync().subscribe();
+    onTerminalState("SendLinkHandler");
+})
+```
+
+When `RequestResponseChannel#onTerminalState()` is called twiced, then it could emit `closeMono`.
+
+```Java
+//RequestResponseChannel
+private void onTerminalState(String handlerName) {
+    ...
+    closeMono.emitEmpty((signalType, emitResult) -> onEmitSinkFailure(...));
+    ...
+}
+```
+
+## Issue 3: CBS node retry infinite loop which cause massive log
+
+**Reason** 
+
+When CBS node (RequestResponseChannel) is closed, it will emit a complete signal, and that signal is catch by `connectionSubscription` which will request a new upstream `RequestResponseChannel`. 
+
+But when new instance of `RequestResponseChannel` is created, it will be closed immediately since connection is shutdown. And that close action will emit a complete signal again and request upstream again. 
+
+This back and forth process cause massive log in console. 
 
 
-**Details**
-
-When connection is closing, it trigger `ReactorConnection#Async()` to close channels and sessions. CBS channel is closed by `RequestResponseChannel#closeAysnc()`, and use `RequestResponseChannel#onTerminalState()` to terminate sender and receiver links. 
+**Code Details** 
 
 When CBS sender and receiver links are closed. It will emit a complete signal:
 
 ```Java
+//RequestResponseChannel
 private void onTerminalState() {
     ...
     endpointStates.emitComplete(((signalType, emitResult) -> onEmitSinkFailure(...)));
-```
-
-The complete signal is catched by `AmqpChannelProcessor#connectionSubscription`. Because channel status is not disposed currently, it goes to `AmqpChannelProcessor#setAndClearChannel()` which actually close this channel, and then goes to `AmqpChannelProcessor#requestUpstream()`.
-
-```Java
-endpointStatesFunction.apply(amqpChannel).subscribe(
-    state -> {...},
-    error -> {...},
-    () -> {
-        if (isDisposed()) {
-            ...
-        } else {
-            logger.info("Channel is closed. Requesting upstream.");
-            setAndClearChannel();
-            requestUpstream();
-        }
-    });
-```
-
-Inside `AmqpChannelProcessor#requestUpstream()`, it request a new channel.
-
-```Java
- private void requestUpstream() {
-       ...
-        if (!isRequested.getAndSet(true)) {
-            logger.info("Connection not requested, yet. Requesting one.");
-            subscription.request(1);
-        }
-    }
-
-```
-
-Because CBS channel is requested from a repeat Flux inside `ReactorConnection#createRequestResponseChannel()`, so a new channel could emit immediately and call `AmqpChannelProcessor#onNext()`.
-
-```Java
-protected AmqpChannelProcessor<RequestResponseChannel> createRequestResponseChannel(
-    final Flux<RequestResponseChannel> createChannel =
-        ...
-            return activeChannel.thenReturn(channel);
-        .doOnNext(e -> {
-            ...
-            .log("Emitting new response channel.");
-        })
-        .repeat();
-
-```
-
-Inside `onNext()`, the `close(oldChannel)` is called.  
-
-```Java
-public void onNext(T amqpChannel) {
-    logger.info("Setting next AMQP channel.");
     ...
-    close(oldChannel);
-
-    if (oldSubscription != null) {
-        oldSubscription.dispose();
-    }
 }
 ```
 
-And `AmqpChannelProcessor#close()` will call `RequestResponseChannel#closeAysnc()`, which form an infinite loop for cbs channel. 
+The complete signal is catched by `connectionSubscription`. Because channel status is not disposed currently and then goes to `requestUpstream()`.
+
 ```Java
-private void close(T channel) {
-    if (channel instanceof AsyncCloseable) {
-        ((AsyncCloseable) channel).closeAsync().subscribe();
-    ...
+//AmqpChannelProcessor
+connectionSubscription = endpointStatesFunction.apply(amqpChannel).subscribe(
+        ...
+        () -> {
+                ...
+                requestUpstream();
+        });
 ```
 
-And we could see the same logs to prove the behavior:
+Because CBS channel is requested from a repeat Flux inside `createRequestResponseChannel()`, so a `RequestResponseChannel` instance is created.
 
+```Java
+//ReactorConnection
+protected AmqpChannelProcessor<RequestResponseChannel> createRequestResponseChannel(
+    final Flux<RequestResponseChannel> createChannel = ...
+         .map(reactorSession -> new RequestResponseChannel(...))
+        .doOnNext(e -> {...})
+        .repeat();
 ```
-Setting next AMQP channel. // AmqpChannelProcessor#onNext()
-Next AMQP channel received...
-Sender link was never active. Closing endpoint states. //close()
-Receiver link was never active. Closing endpoint states. //close()
-Channel is closed. Requesting upstream. //AmqpChannelProcessor#connectionSubscription.onComplete()
-Connection not requested, yet. Requesting one. // AmqpChannelProcessor#requestUpstream()
-Setting next AMQP channel.
+However, inside `RequestResponseChannel` constructor, it call `closeAysc()` and schedule link close tasks, which close current channel after it created.
+
+```Java
 ...
-
+//RequestResponseChannel
+this.subscriptions = Disposables.composite(
+    ...
+    //TODO (conniey): Do we need this if we already close the request response nodes when the
+    // connection.closeWork is executed? It would be preferred to get rid of this circular dependency.
+    amqpConnection.getShutdownSignals().next().flatMap(signal -> {
+        logger.verbose("Shutdown signal received.");
+        return closeAsync();
+    }).subscribe()
+);
 ```
 
-**Call graph**
+As new channel is closed, it will emit a complete signal to request new upstream, which goes to the beginning step.
 
-![img](./cbs-note-close-issue.png
-)
+This is a infinite loop for CBS node.
 
+### Test Solutions(not final solution)
 
-**Current Solution**
+1. Remove `RequestResponseChannel#amqpConnection` (issue 1, issue 3)
 
-Revert the change in PR #22534 to fix this issue.
+    - Only have one close thread
+    - No infinite loop but have one request upstream log
 
-Figure out the reason for issue [#22533](https://github.com/Azure/azure-sdk-for-java/issues/22533)
+2. Not to emit channel complete signal when close/ remove requestUpStream() (issue 3)
+
+    - no request upstream log
+
+3. Emit to closeMono when first close channel(issue 2)
+
+    - no timeout issue
+
+**TODO**
+
+No sure if any side-effect, so need to verify the changes.

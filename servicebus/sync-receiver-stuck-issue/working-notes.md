@@ -1,4 +1,4 @@
-# Synchronous Receiver client stops receiving
+# Sevice Bus Synchronous Receiver client stops receiving
 
 ## Issue 
 
@@ -98,3 +98,7 @@ After Exception thrown, wait few seconds before bring up new thread.
 
 **Addition Information**
 no issue in version 7.4.2, only from 7.5.1.
+
+**TODO**
+
+Confirm the root cause and fix it.
