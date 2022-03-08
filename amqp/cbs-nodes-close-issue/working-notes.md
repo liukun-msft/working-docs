@@ -90,7 +90,7 @@ final Mono<Void> closeOperationWithTimeout = closeMono.asMono()
         })
         .subscribeOn(Schedulers.boundedElastic());
 ```
-This is because when the first time of `sendLink.close()` and `receiveLink.close()` been called, it won't emit complete signal when link is remoteActive. So the `sendLinkHandler` and `receiveLinkHandler` couldn't go through complete method to send out `closeMono`.  
+This is because when `sendLink.close()` and `receiveLink.close()` been called at the first time, it won't emit complete signal when link is remoteActive. So the `sendLinkHandler` and `receiveLinkHandler` couldn't go through complete method to send out `closeMono`.  
 
 **Code Details**
 
@@ -159,7 +159,7 @@ private void onTerminalState(String handlerName) {
 }
 ```
 
-## Issue 3: CBS node retry infinite loop which cause massive log
+## Issue 3: CBS node retry infinite loop which cause massive logs
 
 **Reason** 
 
@@ -227,18 +227,22 @@ This is a infinite loop for CBS node.
 
 ### Test Solutions(not final solution)
 
-1. Remove `RequestResponseChannel#amqpConnection` (issue 1, issue 3)
+1. Remove `RequestResponseChannel#amqpConnection` to avoid duplicate closing (issue 1, issue 3)
 
     - Only have one close thread
-    - No infinite loop but have one request upstream log
+    - No infinite loop, but have one request upstream log
 
-2. Not to emit channel complete signal when close/ remove requestUpStream() (issue 3)
+2. Explict Emit `closeMono` complete signal when first time close channel(issue 2)
+   
+    - No timeout issue
+    
 
-    - no request upstream log
+3. Not to emit channel complete signal when close/ remove requestUpStream() (issue 3)
 
-3. Emit to closeMono when first close channel(issue 2)
+    - No request upstream log
 
-    - no timeout issue
+
+Do the above changes: [solution-logs-3](./solution-logs-3.md)
 
 **TODO**
 
