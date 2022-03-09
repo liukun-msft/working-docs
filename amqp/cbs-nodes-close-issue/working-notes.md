@@ -244,6 +244,9 @@ This is a infinite loop for CBS node.
 
 Do the above changes: [solution-logs-3](./solution-logs-3.md)
 
+4. Try to use takeUntilOther(shutdown signal) to replace repeat()
+
+
 **TODO**
 
 No sure if any side-effect, so need to verify the changes.

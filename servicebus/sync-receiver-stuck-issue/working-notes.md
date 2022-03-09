@@ -99,6 +99,8 @@ After Exception thrown, wait few seconds before bring up new thread.
 **Addition Information**
 no issue in version 7.4.2, only from 7.5.1.
 
+related changes: https://github.com/Azure/azure-sdk-for-java/pull/25771/
+
 **TODO**
 
 Confirm the root cause and fix it.
