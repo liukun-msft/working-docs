@@ -11,8 +11,10 @@ When the CBS node (ClaimsBasedSecurityNode) is closed, it'll make a request upst
 **Related issue or changes**
 
 - Message receiving is stuck because AMQP connection is closed without an error
-https://github.com/Azure/azure-sdk-for-java/issues/22533
-https://github.com/Azure/azure-sdk-for-java/pull/22534
+
+    https://github.com/Azure/azure-sdk-for-java/issues/22533
+
+    https://github.com/Azure/azure-sdk-for-java/pull/22534
 
 - Add timeout to cleaning up sender/receiver links
 https://github.com/Azure/azure-sdk-for-java/pull/23381
@@ -78,7 +80,89 @@ Mono<Void> closeAsync(AmqpShutdownSignal shutdownSignal){
 
 **Reason**
 
-No `closeMono` complete signal has been received after `RequestResponseChannel#closeAsync` was called.
+We manually close an closed CBS node.
+
+```Java
+//ReactorConnection
+final Mono<Void> cbsCloseOperation;
+if (cbsChannelProcessor != null) {
+    cbsCloseOperation = cbsChannelProcessor.flatMap(channel -> channel.closeAsync());
+} else {
+    cbsCloseOperation = Mono.empty();
+}
+```
+
+CBS node has already closed after we closed CBS session, so if we close the CBS node again, no `closeMono` complete signal will emit which cause the timeout Exception.
+
+**Code Details**
+
+When `ReactorConnection` is shutting down, it will emit `shutdownSignal`.
+
+```Java
+//ReactorConnection
+Mono<Void> closeAsync(AmqpShutdownSignal shutdownSignal) {
+    addShutdownSignal(logger.atInfo(), shutdownSignal).log("Disposing of ReactorConnection.");
+    final Sinks.EmitResult result = shutdownSignalSink.tryEmitValue(shutdownSignal);
+    ...
+}
+```
+
+Then the `shutdownSignal` is catched by all `ReactorSession` on that `ReactorConnection`, and `ReactorSession` is going to closed first.
+
+```Java
+//ReactorSession
+shutdownSignals.flatMap(signal ->  closeAsync("Shutdown signal received", null, false)).subscribe());
+```
+
+The session will schedule `disposeLinks` tasks. So the links on that session will be closed also.
+
+```Java
+//ReactorSession
+Mono<Void> closeAsync(String message, ErrorCondition errorCondition, boolean disposeLinks) {
+    ...
+        return Mono.fromRunnable(() -> {
+            try {
+                provider.getReactorDispatcher().invoke(() -> disposeWork(errorCondition, disposeLinks));
+            } 
+            ...
+        }).then(isClosedMono.asMono());
+    }
+```
+
+After we close cbs session, it will automatically close cbs sender and receiver link. Then `RequestResponseChannel` has `receiveLinkHandler` and `sendLinkHandler` to catch up that completed signal to close CBS node.
+
+```Java
+//RequestResponseChannel
+ receiveLinkHandler.getEndpointStates().subscribe(state -> {
+        updateEndpointState(null, AmqpEndpointStateUtil.getConnectionState(state));
+    }, error -> {
+       ...
+    }, () -> {
+        closeAsync().subscribe();
+        onTerminalState("ReceiveLinkHandler");
+    }),
+
+    sendLinkHandler.getEndpointStates().subscribe(state -> {
+        updateEndpointState(AmqpEndpointStateUtil.getConnectionState(state), null);
+    }, error -> {
+       ...
+    }, () -> {
+        closeAsync().subscribe();
+        onTerminalState("SendLinkHandler");
+    })
+```
+
+When `RequestResponseChannel#onTerminalState` is called twice (send and receiver), it will emit `closeMono` complete signal. 
+
+```Java
+//RequestResponseChannel
+private void onTerminalState(String handlerName) {
+    ...
+    closeMono.emitEmpty((signalType, emitResult) -> onEmitSinkFailure(...));
+    ...
+}
+```
+ `closeMono` complete signal will close the timeout.
 
 ```Java
 //RequestResponseChannel
@@ -90,11 +174,9 @@ final Mono<Void> closeOperationWithTimeout = closeMono.asMono()
         })
         .subscribeOn(Schedulers.boundedElastic());
 ```
-This is because when `sendLink.close()` and `receiveLink.close()` been called at the first time, it won't emit complete signal when link is remoteActive. So the `sendLinkHandler` and `receiveLinkHandler` couldn't go through complete method to send out `closeMono`.  
 
-**Code Details**
+However, then if we explictly close CBS node again, it just call `sendLink` and `receiveLink` to close, which is already closed. So that it won't trigger `receiveLinkHandler` and `sendLinkHandler` to call `onTerminalState` twice, and cause timeout. (As a workaround way is to add `onTerminalState` in closeAync, which can avoid timeout exception, but the logic is not correct). We could consider whether to have `sendLink.close()` or `receiveLink.close()` here, maybe it can be use for someone explictly call this function rather than close session.
 
-When `RequestResponseChannel#closeAsync` is called, it will schedule `sendLink.close()` and `receiveLink.close()` tasks.
 
 ``` Java
 //RequestResponseChannel
@@ -113,51 +195,6 @@ public Mono<Void> closeAsync() {
             ...
 ```
 
-And when `sendLink.close()` and `receiveLink.close()` tasks run, it will check if `isRemoveActive`. Only when value if false, it will call `super.close()` to emit a complete signal. （For the first time, the `isRemoteActive` may be true - need verify）
-
-```Java
-//SendLinkHandler and ReceiverLinkHandler
-public void onLinkLocalClose(Event event) {
-    super.onLinkLocalClose(event);
-    if (!isRemoteActive.get()) {
-        ...
-        super.close();
-    }
-}
-```
-**Expected behavior**
-
-The link should emit a complete signal when it is closed, the `receiveLinkHandler` and `sendLinkHandler` can catch that and call `RequestResponseChannel#onTerminalState()` twice.
-
-```Java
-//RequestResponseChannel
-receiveLinkHandler.getEndpointStates().subscribe(state -> {
-    updateEndpointState(null, AmqpEndpointStateUtil.getConnectionState(state));
-}, ...
-() -> {
-    closeAsync().subscribe();
-    onTerminalState("ReceiveLinkHandler");
-}),
-
-sendLinkHandler.getEndpointStates().subscribe(state -> {
-    updateEndpointState(AmqpEndpointStateUtil.getConnectionState(state), null);
-}, ...
-() -> {
-    closeAsync().subscribe();
-    onTerminalState("SendLinkHandler");
-})
-```
-
-When `RequestResponseChannel#onTerminalState()` is called twiced, then it could emit `closeMono`.
-
-```Java
-//RequestResponseChannel
-private void onTerminalState(String handlerName) {
-    ...
-    closeMono.emitEmpty((signalType, emitResult) -> onEmitSinkFailure(...));
-    ...
-}
-```
 
 ## Issue 3: CBS node retry infinite loop which cause massive logs
 
@@ -242,11 +279,17 @@ This is a infinite loop for CBS node.
     - No request upstream log
 
 
-Do the above changes: [solution-logs-3](./solution-logs-3.md)
+Do the above changes: [solution-logs-123](./solution-logs-123.md)
 
-4. Try to use takeUntilOther(shutdown signal) to replace repeat()
+4. Try to use takeUntilOther(shutdown signal) after repeat (issue 3)
+    - should work with step 5 
+    - No request upstream log
+
+5. Remove manually close cbs channel in ReactorConnection (issue 2)
+    - No timeout issue
+
+ 
+Current changes: [solution-logs-145](./solution-logs-145.md)
+1 + 4 + 5
 
 
-**TODO**
-
-No sure if any side-effect, so need to verify the changes.
