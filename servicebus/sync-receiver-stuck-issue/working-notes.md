@@ -96,11 +96,27 @@ When thread was kill, currentWork(#Work 1) may not fully terminated because it r
 After Exception thrown, wait few seconds before bring up new thread.
 
 
-**Addition Information**
-no issue in version 7.4.2, only from 7.5.1.
+### Fix
+
+1. Correct check condition inside `queueWork()`. If `currentWork` is not terminated, the new coming work should be place into `workQueue`. (Actually this work also do in getOrUpdateCurrentWork(), but here can make log correct).
+ 
+2. When REQUESTED == 0L (`CurrentWork` is completed), update `CurrentWork` to request new message.
+
+**Detailed logic**
+
+Below diagram shows when call receiver client to receive message:
+
+![img](./sync-receiver-logic.png)
+
+Below diagram shows what if current work is completed or timeout:
+
+![img](./work-complete-and-timeout.png)
+
 
 related changes: https://github.com/Azure/azure-sdk-for-java/pull/25771/
 
-**TODO**
+TODO:
 
-Confirm the root cause and fix it.
+Currently the work couldn't be terminated when thread is killed. So we need find a way to notify `reactor-executor` thread, otherwise, if we killed thread too often, it may queue lots of works.
+
+The `REQUESTED` in upstream `ServiceBusReceiveLinkProcessor` actually not consistent with `REQUESTED` in `SynchronousMessageSubscriber`.  
