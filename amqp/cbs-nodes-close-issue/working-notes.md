@@ -81,7 +81,7 @@ These two manually calls both encounter the timeout exceptions and create a new 
 
 ### Issue 2: CBS node close timeout exception
 
-**Reason**
+**Previos Reason - log view**
 
  `closeMono` complete signal will close the timeout. And `closeMono` is completed after link handler is completed.
 
@@ -124,6 +124,11 @@ Mono<Void> closeAsync(AmqpShutdownSignal shutdownSignal) {
         .then(isClosedMono.asMono());
 }
 ```
+
+**Real Reason - design view**
+
+However, `cbsCloseOperation` is call `onLinkFinal` to complete link. This is not initial design. Actually, the root cause is `onLinkRemoteClose` is never fired because of no Detach frame is sent out for CBS links. And check in code logic, the CBS session is close earlier than links, so that it directly send out End Frame and after that, when `link.close()` is called, no Detach frame is sent out since session is closed.
+
 
 ## Issue 3: CBS node retry infinite loop which cause massive logs
 
