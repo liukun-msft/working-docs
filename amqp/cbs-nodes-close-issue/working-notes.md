@@ -279,17 +279,38 @@ Timeout issue frame sequence:
 
 ![img](./cbs-closing-frame-logic1.png)
 
+Wrap `shutdownSignal` in `emitShutDownSignalOperation`:
+```Java
+final Mono<Void> emitShutDownSignalOperation = Mono.fromRunnable(() -> {
+    ...
+    final Sinks.EmitResult result = shutdownSignalSink.tryEmitValue(shutdownSignal);
+    ...
 
-Side effect: CBS node will request one un-initialize cbs channel after it closed. However, it can self-close after connection shutdown signal is emiited.
+return Mono.whenDelayError(
+    cbsCloseOperation.doFinally(...)
+        ...
+    managementNodeCloseOperations.doFinally(...))
+        ...
+    // Make sure to close request-response-channel before session is closed.
+    .then(emitShutDownSignalOperation.doFinally
+    ...
+    .then(closeReactor.doFinally(signalType ->
+    ...
+    .then(isClosedMono.asMono());
+```
+
+Side effect: CBS node will request one un-initialize cbs channel after it closed. However, it can self-close after connection shutdown signal is emitted.
 
 **Solution 2:** Ensure CBS Detach is sent earlier than session END frame. But async received.
 
-- Wrap connection shutdownSignal in emitShutDownSignalOperation and block until cbsCloseOperation finished.
+- Wrap connection `shutdownSignal` in `emitShutDownSignalOperation` and block until `cbsCloseOperation` finished.
 - Change to use `cbsChannelProcessor.dispose()`
+
+After change:
 
 ![img](./cbs-closing-frame-logic2.png)
 
-Change from 
+Change
 ```Java
 cbsCloseOperation =  cbsChannelProcessor.flatMap(channel -> channel.closeAsync());
 ```
@@ -300,12 +321,19 @@ cbsCloseOperation = Mono.fromRunnable(() -> cbsChannelProcessor.dispose());
 
 As dispose() wouldn't return `closeOperationWithTimeout`, so `closeReactor` wouldn't wait CBS node totally completed. 
 
+When use dispose(), it won't request a new RRchannel. But may sync receive detach to async.
+
 **Solution 3:** Just change cbsChannelProcessor to use dispose, since it would not block emit connection close, so that links will be close by `onLinkFinal` if no detach frame are sent out.
 
 - Change to use `cbsChannelProcessor.dispose()`
 
+After change:
+
 ![img](./cbs-closing-frame-logic3.png)
 
+And sometimes:
+
+![img](./cbs-closing-frame-logic2.png)
 
 **TODO** 
 
