@@ -405,7 +405,7 @@ As new channel is closed, it will emit a complete signal to request new upstream
 
 This is a infinite loop for CBS node.
 
-### Test Solutions(not final solution)
+### (OLD SOLUTIONS, Latest solution check section "How to fix" in issue 2)
 
 1. Remove `RequestResponseChannel#amqpConnection` to avoid duplicate closing (issue 1, issue 3)
 
