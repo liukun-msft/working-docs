@@ -2,17 +2,13 @@
 
 **Issue link**: https://github.com/Azure/azure-sdk-for-java/issues/24064.
 
-**Content**
-
-[toc]
-
-#### Description
+### Description
 
 When use `SessionProcessorClient` to receive messages, say we try to receive message #1 and #2. If we abondon message #1, the next message is to be processed is message #2, not message #1. We can receive and process message #1 only after message #2 has been processed.   
 
 The issue is found in `SessionProcessorClient` and not in `SessionReceiverClient` and `ProcessorClient`.
 
-#### Log Analysis
+### Log Analysis
 
 See repro code snippet in [issue#24064](https://github.com/Azure/azure-sdk-for-java/issues/24064) 
 
@@ -24,7 +20,7 @@ From the log, we can see that when `SessionProcessor` receives the message #0, i
 
 The question becomes why we prefetch 2 messages? Although we use `publishOn(scheduler, prefetch = 1)` to receive message.
 
-#### Code Analysis
+### Code Analysis
 
 For `SessionProcessor`, the `receiveClient` calls `ServiceBusSessionManager#receive()` to return a `receiveFlux` and uses `receiveFlux` to fetch messages. 
 
@@ -81,7 +77,7 @@ After going though the code, the logic looks good and we prefetch only 1 message
 
 The reason may comes from reactor-core or we may wrongly use some `Flux` methods. To verify that, we can simplify the issue by only write the reactor code to represent session receiving prossess. See [Simplify receive logic](./working-notes.md#simplify-receive-logic).
 
-#### Root Cause Analysis
+### Root Cause Analysis
 
 After debugging and testing, the issue occur when we use `Flux#publishOn` in combination with `Flux#merge`. The reactor will create a class `FluxPublishOn` to wrap `Flux#merge` as `Subscriber` to `Flux#publishOn`. And when recevived messages, the `FluxPublishOn` will call its `poll()` method to get message from queue and then pass to the downstream `onNext()` method.
 
@@ -110,7 +106,7 @@ Now we can explain why we receive 2 messages (#0 and #1) before first message pr
 
 This is internal implementation of `FluxPublishOn`, it adds this behavior we are not expected. I still need to understand why they implement `poll()` function in this way.
 
-#### Walkaround
+### Walkaround
 
 Some walkaround can solve the issue, but these are all need to test whether bring any impact:
 
@@ -121,7 +117,7 @@ Some walkaround can solve the issue, but these are all need to test whether brin
 
 Both of these walkaround will use a `OneQueue` rather than `PublishOnSubscriber` queue, so it won't jump this `poll()` function to request extra `p` messages.
 
-#### Simplify receive logic
+### Simplify receive logic
 
 We write reactor code to represent 
 
