@@ -18,7 +18,7 @@ Add some customized logs and run with the latest sevice bus version (7.10.0-beta
 
 From the log, we can see that when `SessionProcessor` receives the message #0, it immediately requests the next message #1 before message #0 fully processed. So actually we request 2 messages at first time. Therefore, if mesasge #0 is abandoned, we directly process message #1 as next message. After message #1 is processed, we then request abandoned message #0 again.
 
-The question becomes why we prefetch 2 messages? Although we use `publishOn(scheduler, prefetch = 1)` to receive message.
+**The question becomes why we prefetch 2 messages? Although we use `publishOn(scheduler, prefetch = 1)` to receive message.**
 
 ### Code Analysis
 
@@ -73,9 +73,7 @@ final Flux<ServiceBusMessageContext> receivedMessagesFlux = receiveLink
             });
 ```
 
-After going though the code, the logic looks good and we prefetch only 1 message at a time. After message is processed, we request another one.
-
-The reason may comes from reactor-core or we may wrongly use some `Flux` methods. To verify that, we can simplify the issue by only write the reactor code to represent session receiving prossess. See [Simplify receive logic](./working-notes.md#simplify-receive-logic).
+After going though the code, the logic looks good and we prefetch only 1 message at a time. The reason may comes from reactor-core or we may wrongly use some `Flux` methods. To verify that, we can simplify the issue by only write the reactor code to represent session receiving prossess. See [Simplify receive logic](./working-notes.md#simplify-receive-logic).
 
 ### Root Cause Analysis
 
@@ -98,28 +96,28 @@ public T poll() {
     return v;
 }
 ```
-For the implementation, we can see there is `p == limit` check block. The `FluxPublishOn` will request extra `p` messages when `p` reach the `limit`. 
+For the implementation, we can see there is `p == limit` check block. When `p` reaches the `limit`, the `FluxPublishOn` will re-request `p` messages . 
 
-Now we can explain why we receive 2 messages (#0 and #1) before first message processed:
+Now we can explain why we receive 2 messages (#0 and #1) before processing message #0:
 
-**When we received the first message (#0), the `p` change to 1, and `limit` is 1 (prefetch == 1), so `s` (subscription) will reuqest 1 more message (#1) before pass the first message to downsteam `onNext()` to consume.**
+**When we received the first message (#0), the `p` becomes 1 and `limit` is 1 (prefetch == 1), so `s` (subscription) will reuqest one more message (#1) before passing the first message (#0) to downsteam `onNext()` to consume.**
 
-This is internal implementation of `FluxPublishOn`, it adds this behavior we are not expected. I still need to understand why they implement `poll()` function in this way.
+This is an internal implementation of `FluxPublishOn`, that adds behavior that we don't expect. I still need to understand why they implement the `poll()` function in this way.
 
 ### Walkaround
 
-Some walkaround can solve the issue, but these are all need to test whether bring any impact:
+Some walkaround can solve the issue, but these need to be tested to see if they bring new impact:
 
-1. add `map(message -> message)` after `publishOn(scheduler, 1)
+1. Add `map(message -> message)` after `publishOn(scheduler, 1)
 
-2. move `publishOn(scheduler, 1)` to `ServiceBusSessionReceiver`
+2. Move `publishOn(scheduler, 1)` to `ServiceBusSessionReceiver`
 
 
-Both of these walkaround will use a `OneQueue` rather than `PublishOnSubscriber` queue, so it won't jump this `poll()` function to request extra `p` messages.
+Both of these walkaround will use a `OneQueue` instead of `PublishOnSubscriber` queue, so it will not call this `poll()` function to re-request `p` messages.
 
 ### Simplify receive logic
 
-We write reactor code to represent 
+I write code which only using reactor to repro the issue. This can help to debug and fix more easily
 
 ```Java
 @Test
