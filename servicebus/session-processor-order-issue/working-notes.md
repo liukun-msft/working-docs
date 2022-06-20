@@ -2,49 +2,86 @@
 
 ## Issue 
 
-#### Description
-
 https://github.com/Azure/azure-sdk-for-java/issues/24064.
 
-The issue was found in `sessionProcessor` and not found in `sessionReceiver` and `processor`.
+#### Description
 
-#### Logs Analysis
+When use `SessionProcessorClient` to receive messages, say we try to receive message #1 and #2. If we abondon message #1, the next message is to be processed is message #2, not message #1. We can receive and process message #1 only after message #2 has been processed.   
 
-Build and run the latest sevice bus version (7.10.0-beta.1) with extract logs:
+The issue is found in `SessionProcessorClient` and not in `SessionReceiverClient` and `ProcessorClient`.
+
+#### Log Analysis
+
+See repro code snippet in [issue#24064](https://github.com/Azure/azure-sdk-for-java/issues/24064) 
+
+Add some customized logs and run with the latest sevice bus version (7.10.0-beta.1):
 
 ![img](./session-processor-logs-1.png)
 
-From logs, we could see when `sessionProcessor` received the no.0 message, it immediately request the next message before no. 0 message fully processed. If no.0 is abandoned, the next message fetched from receiving queue is no.1. So the `sessionProcessor` actually request 2 messages at the first time (no.0 and no.1), and when first message in queue is abandoned, the next message is not correct. The third coming message should be the correct one.
+From the log, we can see that when `SessionProcessor` receives the message #0, it immediately requests the next message #1 before message #0 fully processed. So actually we request 2 messages at first time. Therefore, if mesasge #0 is abandoned, we directly process message #1 as next message. After message #1 is processed, we then request abandoned message #0 again.
+
+The question becomes why we prefetch 2 messages? Although we use `publishOn(scheduler, prefetch = 1)` to receive message.
+
+#### Code Analysis
+
+For `SessionProcessor`, the `receiveClient` calls `ServiceBusSessionManager#receive()` to return a `receiveFlux` and uses `receiveFlux` to fetch messages. 
+
+If `receiveClient` is a rolling receiver, `receiceFlux` will be construct by `Flux#merge`, which use `processor` to publish messages from different sessions. 
+
+```Java
+//ServiceBusSessionManager
+Flux<ServiceBusMessageContext> receive() {
+    ...
+    receiveFlux = Flux.merge(processor, receiverOptions.getMaxConcurrentSessions());
+    ...
+    return receiveFlux;
+}
+```
+ 
+ The `processor` will emit `Flux<ServiceBusMessageContext>` to receive messages when session and receive link is active. This is created by `ServiceBusSessionManager#getSession()` function.
+
+```Java
+private Flux<ServiceBusMessageContext> getSession(...){
+    return getActiveLink().flatMap(link -> link.getSessionId()
+        .map(...return new ServiceBusSessionReceiver(...)))
+        .flatMapMany(sessionReceiver -> sessionReceiver.receive()...)
+        .publishOn(scheduler, 1); //prefetch = 1
+}
+```
+Here we set prefetch of publishOn is 1, so we only request 1 message every time try to receive.
+
+The `sessionReceiver.receive()` will return `receivedMessageFlux`, which defines publish source is from `receiveLink.receive()` and some actions like `doOnsubscribe()`,, `doOnRequest()`, `map()` tp deserilaize message and `onErrorResume()`. 
+
+```Java
+//ServiceBusSessionReceiver
+final Flux<ServiceBusMessageContext> receivedMessagesFlux = receiveLink
+            .receive()
+            .publishOn(scheduler)
+            .doOnSubscribe(subscription -> {
+              ...
+            })
+            .doOnRequest(request -> {  // request is of type long.
+              ...
+            })
+            .takeUntilOther(cancelReceiveProcessor)
+            .map(message -> {
+              ...
+            })
+            .onErrorResume(error -> {
+              ...
+            })
+            .doOnNext(context -> {
+                ...
+            });
+```
+
+After going though the code, the logic looks good and we prefetch only 1 message at a time. After message is processed, we request another one.
+
+The reason may comes from reactor-core or we may wrongly use some `Flux` methods. To verify that, we can simplify the issue by only write the reactor code to represent session receiving prossess. See [Simplify receive logic](./working-notes.md#simplify-issue-using-reactor).
 
 #### Root Cause Analysis
 
-When we build `sessionProcessor`, behind, it use `receiveFlux` to receive message form different sessions.
-
-
-```Java
-receiveFlux = Flux.merge(processor, receiverOptions.getMaxConcurrentSessions());
-```
-
-And inside the processor, it will emit `Flux<ServiceBusMessageContext>` to receive messages when session and receive link is active. This is created by `getSession()` function
-
-```Java
-return getActiveLink().flatMap(link -> link.getSessionId()
-    .map(
-        ...
-        return new ServiceBusSessionReceiver(link, messageSerializer, connectionProcessor.getRetryOptions(),
-            receiverOptions.getPrefetchCount(), disposeOnIdle, scheduler, this::renewSessionLock,
-            maxSessionLockRenewDuration);
-    })))
-    .flatMapMany(sessionReceiver -> sessionReceiver.receive().doFinally(signalType -> {
-    ... 
-        }
-    }))
-    .publishOn(scheduler, 1);
-
-```
-
-We found the issue happened when we use `Flux#publishOn` combine with `Flux#merge`. By debug we find the `publishOn` will create a `FluxPublishOn` instance and it poll message from 
-
+After debugging and testing, the issue occur when we use `Flux#publishOn` in combination with `Flux#merge`. The reactor will create a class `FluxPublishOn` to wrap `Flux#merge` as `Subscriber` to `Flux#publishOn`. And when recevived messages, the `FluxPublishOn` will call its `poll()` method to get message from queue and then pass to the downstream `onNext()` method.
 
 ```Java
 //FluxPublishOn.class
@@ -63,15 +100,28 @@ public T poll() {
     return v;
 }
 ```
-`poll()` is to get data from queue to pass to subscriber's `onNext(T t)`;
+For the implementation, we can see there is `p == limit` check block. The `FluxPublishOn` will request extra `p` messages when `p` reach the `limit`. 
 
-Base on logic if `p == limit`, the `FluxPublishOn` will request extra `p`. Here when we received the first message, the `p` change to 1, and because of `limit` is 1, so `s` (subscription) reuqest 1 more message before pass first message to `onNext()`. 
+Now we can explain why we receive 2 messages (#0 and #1) before first message processed:
 
-So the behavior is before we consume first message, we already request to receive the second message.
+**When we received the first message (#0), the `p` change to 1, and `limit` is 1 (prefetch == 1), so `s` (subscription) will reuqest 1 more message (#1) before pass the first message to downsteam `onNext()` to consume.**
 
-#### Simplify issue using reactor
+This is internal implementation of `FluxPublishOn`, it adds this behavior we are not expected. I still need to understand why they implement `poll()` function in this way.
 
-To help for eaily debug and fix, we use rare reactor code to repro this issue.
+#### Walkaround
+
+Some walkaround can solve the issue, but these are all need to test whether bring any impact:
+
+1. add `map(message -> message)` after `publishOn(scheduler, 1)
+
+2. move `publishOn(scheduler, 1)` to `ServiceBusSessionReceiver`
+
+
+Both of these walkaround will use a `OneQueue` rather than `PublishOnSubscriber` queue, so it won't jump this `poll()` function to request extra `p` messages.
+
+#### Simplify receive logic
+
+We write reactor code to represent 
 
 ```Java
 @Test
