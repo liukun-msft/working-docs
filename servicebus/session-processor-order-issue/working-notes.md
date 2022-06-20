@@ -1,8 +1,10 @@
-# [Service Bus] Abandon message may disrupt the ordered processing of session based message 
+## [Service Bus] Abandon message may disrupt the ordered processing of session based message 
 
-## Issue 
+**Issue link**: https://github.com/Azure/azure-sdk-for-java/issues/24064.
 
-https://github.com/Azure/azure-sdk-for-java/issues/24064.
+**Content**
+
+[toc]
 
 #### Description
 
@@ -77,7 +79,7 @@ final Flux<ServiceBusMessageContext> receivedMessagesFlux = receiveLink
 
 After going though the code, the logic looks good and we prefetch only 1 message at a time. After message is processed, we request another one.
 
-The reason may comes from reactor-core or we may wrongly use some `Flux` methods. To verify that, we can simplify the issue by only write the reactor code to represent session receiving prossess. See [Simplify receive logic](./working-notes.md#simplify-issue-using-reactor).
+The reason may comes from reactor-core or we may wrongly use some `Flux` methods. To verify that, we can simplify the issue by only write the reactor code to represent session receiving prossess. See [Simplify receive logic](./working-notes.md#simplify-receive-logic).
 
 #### Root Cause Analysis
 
