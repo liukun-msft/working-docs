@@ -164,33 +164,33 @@ public void testPublishOnWithMerge() throws InterruptedException {
 
 Logs:
 ```
-2022-06-20 17:26:16,191 INFO  [main] org.example.sinks.DoOnRequestTest: Subscriber - onSubscribe called
-2022-06-20 17:26:16,192 INFO  [main] org.example.sinks.DoOnRequestTest: Subscriber - Requesting 1 more message onSubscribe
-2022-06-20 17:26:16,208 INFO  [main] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - doOnSubscribe called
-2022-06-20 17:26:16,210 INFO  [main] reactor.Flux.PeekFuseable.1: | onSubscribe([Fuseable] FluxPeekFuseable.PeekFuseableSubscriber)
-2022-06-20 17:26:16,212 INFO  [main] reactor.Flux.PeekFuseable.1: | request(1)
-2022-06-20 17:26:16,217 INFO  [main] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - doOnRequest called, request number: 1
-2022-06-20 17:26:16,217 INFO  [main] org.example.sinks.DoOnRequestTest: -------------- emit messages ------------
-2022-06-20 17:26:16,220 INFO  [main] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - Received message : First Data
-2022-06-20 17:26:16,220 INFO  [main] reactor.Flux.PeekFuseable.1: | onNext(First Data)
-2022-06-20 17:26:16,221 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - onNext called
-2022-06-20 17:26:17,227 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - Process finished: First Data
-2022-06-20 17:26:17,227 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - Requesting 1 more message onNext
-2022-06-20 17:26:17,228 INFO  [receiver--1] reactor.Flux.PeekFuseable.1: | request(1)
-2022-06-20 17:26:17,228 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - doOnRequest called, request number: 1
-2022-06-20 17:26:17,228 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - Received message : Second Data
-2022-06-20 17:26:17,228 INFO  [receiver--1] reactor.Flux.PeekFuseable.1: | onNext(Second Data)
-2022-06-20 17:26:17,228 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - onNext called
-2022-06-20 17:26:18,239 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - Process finished: Second Data
-2022-06-20 17:26:18,239 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - Requesting 1 more message onNext
-2022-06-20 17:26:18,239 INFO  [receiver--1] reactor.Flux.PeekFuseable.1: | request(1)
-2022-06-20 17:26:18,240 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - doOnRequest called, request number: 1
-2022-06-20 17:26:18,240 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - Received message : Third Data
-2022-06-20 17:26:18,240 INFO  [receiver--1] reactor.Flux.PeekFuseable.1: | onNext(Third Data)
-2022-06-20 17:26:18,240 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - onNext called
-2022-06-20 17:26:19,251 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - Process finished: Third Data
-2022-06-20 17:26:19,251 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - Requesting 1 more message onNext
-2022-06-20 17:26:19,251 INFO  [receiver--1] reactor.Flux.PeekFuseable.1: | request(1)
-2022-06-20 17:26:19,251 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - doOnRequest called, request number: 1
+2022-06-21 15:26:33,717 INFO  [main] org.example.sinks.DoOnRequestTest: Subscriber - onSubscribe called
+2022-06-21 15:26:33,719 INFO  [main] org.example.sinks.DoOnRequestTest: Subscriber - Requesting 1 more message onSubscribe
+2022-06-21 15:26:33,730 INFO  [main] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - doOnSubscribe called
+2022-06-21 15:26:33,733 INFO  [main] reactor.Flux.PeekFuseable.1: | onSubscribe([Fuseable] FluxPeekFuseable.PeekFuseableSubscriber)
+2022-06-21 15:26:33,736 INFO  [main] reactor.Flux.PeekFuseable.1: | request(1)
+2022-06-21 15:26:33,739 INFO  [main] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - doOnRequest called, request number: 1
+2022-06-21 15:26:33,741 INFO  [main] org.example.sinks.DoOnRequestTest: -------------- emit messages ------------
+2022-06-21 15:26:33,744 INFO  [receiver--2] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - Received message : First Data
+2022-06-21 15:26:33,745 INFO  [receiver--2] reactor.Flux.PeekFuseable.1: | onNext(First Data)
+2022-06-21 15:26:33,745 INFO  [receiver--1] reactor.Flux.PeekFuseable.1: | request(1)
+2022-06-21 15:26:33,745 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - doOnRequest called, request number: 1
+2022-06-21 15:26:33,745 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - onNext called
+2022-06-21 15:26:33,745 INFO  [receiver--2] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - Received message : Second Data
+2022-06-21 15:26:33,745 INFO  [receiver--2] reactor.Flux.PeekFuseable.1: | onNext(Second Data)
+2022-06-21 15:26:34,757 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - Process finished: First Data
+2022-06-21 15:26:34,757 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - Requesting 1 more message onNext
+2022-06-21 15:26:34,757 INFO  [receiver--1] reactor.Flux.PeekFuseable.1: | request(1)
+2022-06-21 15:26:34,757 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - doOnRequest called, request number: 1
+2022-06-21 15:26:34,758 INFO  [receiver--2] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - Received message : Third Data
+2022-06-21 15:26:34,758 INFO  [receiver--2] reactor.Flux.PeekFuseable.1: | onNext(Third Data)
+2022-06-21 15:26:34,758 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - onNext called
+2022-06-21 15:26:35,770 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - Process finished: Second Data
+2022-06-21 15:26:35,770 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - Requesting 1 more message onNext
+2022-06-21 15:26:35,770 INFO  [receiver--1] reactor.Flux.PeekFuseable.1: | request(1)
+2022-06-21 15:26:35,770 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: receivedMessagesFlux - doOnRequest called, request number: 1
+2022-06-21 15:26:35,770 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - onNext called
+2022-06-21 15:26:36,785 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - Process finished: Third Data
+2022-06-21 15:26:36,785 INFO  [receiver--1] org.example.sinks.DoOnRequestTest: Subscriber - Requesting 1 more message onNext
 ```
 
