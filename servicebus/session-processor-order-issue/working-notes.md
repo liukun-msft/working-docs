@@ -113,7 +113,7 @@ Some walkaround can solve the issue, but these need to be tested to see if they 
 2. Move `publishOn(scheduler, 1)` to `ServiceBusSessionReceiver`
 
 
-Both of these walkaround will use a `OneQueue` instead of `PublishOnSubscriber` queue, so it will not call this `poll()` function to re-request `p` messages.
+Both of these methods will not save `PublishOnSubscriber` as queue in `FluxFlatMap`, so it will not call  `PublishOnSubscriber#poll()` function to re-request `p` messages.
 
 ### Simplify receive logic
 
