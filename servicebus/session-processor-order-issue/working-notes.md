@@ -115,6 +115,8 @@ Some walkaround can solve the issue, but these need to be tested to see if they 
 
 Both of these methods will not save `PublishOnSubscriber` as queue in `FluxFlatMap`, so it will not call  `PublishOnSubscriber#poll()` function to re-request `p` messages.
 
+**Follow up issue:** when concurrent receive session number > 1, `Flux.merge()` have the same logs behavior. This is because when one thread is consuming message, another thread `tryEmit` may be failed, and internally, `Flux.merge()` will put the message in queue and request 1 more message. 
+
 ### Simplify receive logic
 
 I write code which only using reactor to repro the issue. This can help to debug and fix more easily
