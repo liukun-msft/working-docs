@@ -115,7 +115,12 @@ Some walkaround can solve the issue, but these need to be tested to see if they 
 
 Both of these methods will not save `PublishOnSubscriber` as queue in `FluxFlatMap`, so it will not call  `PublishOnSubscriber#poll()` function to re-request `p` messages.
 
-**Follow up issue:** when concurrent receive session number > 1, `Flux.merge()` have the same logs behavior. This is because when one thread is consuming message, another thread `tryEmit` may be failed, and internally, `Flux.merge()` will put the message in queue and request 1 more message. 
+### Follow up issue
+ 
+When session concurrency > 1, `Flux.merge` is going to merge all session receivers, and it have the similar issue. Because when one receiver has successfully pass the message to downstream to consume, at same time, another session receiver may emit failure, and `Flux.merge` will put that message into the queue and request next message immediately.
+
+If we use publishOn, it changes our logic into the Aysnc world. For consuming message, we need the progress to be synchronized, so that I think we can't use `Flux.merge` and need to refactor the SB session manager and session receiver logic.  
+
 
 ### Simplify receive logic
 
