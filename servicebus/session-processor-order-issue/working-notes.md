@@ -104,27 +104,53 @@ Now we can explain why we receive 2 messages (#0 and #1) before processing messa
 
 This is an internal implementation of `FluxPublishOn`, that adds behavior that we don't expect. I still need to understand why they implement the `poll()` function in this way.
 
-### Walkaround
+### Solutions
 
 Some walkaround can solve the issue, but these need to be tested to see if they bring new impact:
 
 1. Add `map(message -> message)` after `publishOn(scheduler, 1)
 
-2. Move `publishOn(scheduler, 1)` to `ServiceBusSessionReceiver`
-
+2. Move `publishOn(scheduler, 1)` to `ServiceBusSessionReceiver` 
 
 Both of these methods will not save `PublishOnSubscriber` as queue in `FluxFlatMap`, so it will not call  `PublishOnSubscriber#poll()` function to re-request `p` messages.
 
+**Current Solution:**
+
+Remove `publishOn(scheduler, 1)`, add `limitRate(1)` after `onRequest()` function
+
 ### Follow up issue
  
-When session concurrency > 1, `Flux.merge` is going to merge all session receivers, and it have the similar issue. Because when one receiver has successfully pass the message to downstream to consume, at same time, another session receiver may emit failure, and `Flux.merge` will put that message into the queue and request next message immediately.
+When session concurrency > 1 `maxConcurrentSessions(>1)`, `Flux.merge` is going to merge all session receivers, and it have the similar issue. Because when one receiver has successfully pass the message to downstream to consume, at same time, another session receiver may emit failure, and `Flux.merge` will put that message into the queue and request next message immediately.
 
-If we use publishOn, it changes our logic into the Aysnc world. For consuming message, we need the progress to be synchronized, so that I think we can't use `Flux.merge` and need to refactor the SB session manager and session receiver logic.  
+If we use publishOn, it changes our logic into the Aysnc world. For consuming message, we need the progress to be synchronized, so that I think we can't use `Flux.merge` and need to refactor the SB session manager and session receiver logic. 
 
+**Logs**
+
+**Current thinking**
+
+Not using `Flux.merge()` and subscribe for each session. So each session can work independently.
+
+1. Add a new API to return Flux<Flux<Message>>.
+2. when session , call session manager n time to get n Flux<Message> response, in processor client we subscribe.
+
+How to combine `maxConcurrentSessions` with `maxConcurrentCalls`?
+
+```Java
+//ServiceBusSessionManager
+Flux<ServiceBusMessageContext> receiveFromNextSession() {
+    Scheduler scheduler = availableSchedulers.poll();
+    if (!receiverOptions.isRollingSessionReceiver()) {
+        receiveFlux = getSession(scheduler, false);
+    } else {
+        receiveFlux = getSession(scheduler, true);
+    }
+    return receiveFlux;
+}
+```
 
 ### Simplify receive logic
 
-I write code which only using reactor to repro the issue. This can help to debug and fix more easily
+I write code which only using reactor to repro the issue. This can help to debug and fix more easily:
 
 ```Java
 @Test
