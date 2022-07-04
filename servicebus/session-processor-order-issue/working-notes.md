@@ -170,10 +170,11 @@ When session concurrency > 1, `Flux.merge()` is going to merge all session recei
 
 ![img](./session-processor-logs-2.png)
 
-Another known issue is when use `Flux.merge()`,  client only consume one session message during a time and if no message received, it move to receive another session. So messages from different session are delivered serialized:
+Another known issue is when use `Flux.merge()`,  client only consume one session message during a time and if no message received, it move to receive another session. 
 
-https://github.com/Azure/azure-sdk-for-java/issues/27336
-https://github.com/Azure/azure-sdk-for-java/issues/24047
+So messages from different session are delivered serialized:
+- https://github.com/Azure/azure-sdk-for-java/issues/27336
+- https://github.com/Azure/azure-sdk-for-java/issues/24047
 
 ![img](./session-processor-logs-3.png)
 
@@ -203,8 +204,5 @@ But here is base on the consumption of `maxConcurrentSessions` = `maxConcurrentC
 
 Questions:
 
-But how to combine `maxConcurrentSessions` with `maxConcurrentCalls` base on current thinking?
-
-
-
-Different behaviors when we abandon message.
+But how to combine `maxConcurrentSessions` with `maxConcurrentCalls`?
+ 
