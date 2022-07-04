@@ -176,7 +176,7 @@ So messages from different session are delivered serialized:
 - https://github.com/Azure/azure-sdk-for-java/issues/27336
 - https://github.com/Azure/azure-sdk-for-java/issues/24047
 
-![img](./session-processor-logs-3.png)
+![img](./session-processor-logs-3.PNG)
 
  Although we can set max current call > 1 to process messages in parallel. But if we `Flux.merge()` + `parrellel()`, it doesn't mean that we process each session in parrallel. It may processes one session message in parrallel and at it finished, then process another session, which is also mentioned in: https://github.com/Azure/azure-sdk-for-java/issues/24487
 
