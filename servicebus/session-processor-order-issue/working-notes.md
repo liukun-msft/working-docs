@@ -184,7 +184,11 @@ So messages from different session are delivered serialized:
 
 Don't use `Flux.merge()`, create subscriber for each session and runs on different threads. So each session works independently. 
 
-1. `ServiceBusSessionManager#receive()` return `Flux<Flux<ServiceBusMessageContext>>`, adding new API in `ServiceBusAysncReceiver` to return `Flux<Flux<~>>` and create subscriber when session manager emit new .
+1. `ServiceBusSessionManager#receive()` return `Flux<Flux<ServiceBusMessageContext>>`, adding new API in `ServiceBusAysncReceiver` to return `Flux<Flux<~>>` and create subscriber when session manager emit new message.
+
+PR: https://github.com/Azure/azure-sdk-for-java/pull/29696
+
+
 2. If `maxConcurrentSession = n` , In processor, we call a new API `ServiceBusSessionManager#receiveFromNextSession()` n times to get n `Flux<ServiceBusMessageContext>` responses. For each reponse, we create a new subscriber to subscribe for each new session.
 
 ```Java
@@ -202,7 +206,3 @@ Flux<ServiceBusMessageContext> receiveFromNextSession() {
 
 But here is base on the consumption of `maxConcurrentSessions` = `maxConcurrentCalls`. We don't set `maxConcurrentCalls` number and leverage session thread to consume message.
 
-Questions:
-
-But how to combine `maxConcurrentSessions` with `maxConcurrentCalls`?
- 
