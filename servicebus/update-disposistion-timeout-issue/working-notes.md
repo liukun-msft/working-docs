@@ -128,6 +128,8 @@ Below are some places we use Schedulers.boundedElastic pool:
     next.getEndpointStates().subscribeOn(Schedulers.boundedElastic()).subscribe(...)
     ```
 
+There are some other places in AMQP package which is to close `ReactorReceiver` and `RequestResponseChannel`.
+
 
 **Why are no threads completed and release thread resources to the pool?**
 
