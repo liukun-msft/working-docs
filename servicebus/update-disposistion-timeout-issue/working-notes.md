@@ -131,8 +131,8 @@ Below are some places we use Schedulers.boundedElastic pool:
 
 **Why are no threads completed and release thread resources to the pool?**
 
-Guessing: It may be because one thread runs on `Schedulers.boundedElastic` may create another task which also need thread from `Schedulers.boundedElastic`, while the there is no thread from the pool. This is like a dead lock, hold one thread and want to get a another thread from pool. Thus, no thread will be completed and release thread resource, then the client is hanging to timeout.
+This is probably because a thread running on "Schedulers.boundedElastic" may create another task that also requires a thread from "Schedulers.boundedElastic" and there are no threads in the pool. This is like a deadlock, holding a thread and trying to get another thread from the pool. As a result, no threads will be completed and the thread resources released, and then the client is hung for a timeout.
 
 **Thinking more**
 
-Some of user may don't know the configuration, so the default value `10 * number of processors`, then it will be a implict limitation for their maxConcurrentCalls. Maybe we need create our own boundedElastic pool base on the maxConcurrentCalls and maxConcurrentSessions.
+Some users may not configure for defaultBoundedElasticSize, so the default value is `10 * number of processors`, which will be a limit to their maxConcurrentCalls. Maybe we need to create our own boundedElastic pool based on maxConcurrentCalls and maxConcurrentSessions.
