@@ -45,6 +45,7 @@ Warning messsage:
 ```
 
 ***Reason*** 
+
 User use a queue name to set the topic name of sender client.
 
 ***How we notice that from logs***
@@ -74,7 +75,7 @@ If we use a queue name to set topic name for sender, the sender can send message
 
 However, if we use a shared connection for a sender and a receiver, the incorrectly configuration may cause issues as the service bus client use both entity name and entity type to create management channel.
 
-If we configure two different entity types for one entity name, the client will create two management channels: one for receiver and one for sender. Because the shared connection can only use one management channel to receive service response, if receiver's management channel override the sender's management channel, the schedule message response is received by the receiver's management channel and we can see "Received delivery without pending message." log warning.Because the response can't be consumed by sender's management channel, the sender get stuck until it throw out the schedule message timeout error. 
+If we configure two different entity types for one entity name, the client will create two management channels: one for receiver and one for sender. Because the shared connection can only use one management channel to receive service response, if receiver's management channel override the sender's management channel, the schedule message response is received by the receiver's management channel and we can see "Received delivery without pending message." log warning. Because the response can't be consumed by sender's management channel, the sender get stuck until it throw out the schedule message timeout error. 
 
 Depends on the process message logic and time, the sender's management channel can be posible to override the receiver's management channel, and in this scenario, because of the renew lock failure, some lock expired errors will be thrown out. We will also see the link remote detached message and transient error 10 minutes after all lock renew task clean up.
 
