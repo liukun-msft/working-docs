@@ -1,8 +1,10 @@
 ## Schedule Message Timeout Error
 
-**Description**
+**Background**
 
-User received below timeout error when schedule a message inside the receiver process message function:
+User use the shared connection for sender and receiver. They receive messages from the queue and schedule new message to same queue when received message met some conditions.
+
+They encounted below schedule timeout error inside the receiver process message function:
 
 ```Java
 java.lang.IllegalStateException: Timeout on blocking read for 245600000000 NANOSECONDS
@@ -46,7 +48,20 @@ Warning messsage:
 
 ***Reason*** 
 
-User use a queue name to set the topic name of sender client.
+User misconfigure the queue name as the topic name of sender client. 
+
+```Java
+sender = builder.sender()
+        .topicName(Credentials.serviceBusQueue)
+        .buildClient();
+
+processor = builder.processor()
+        .queueName(Credentials.serviceBusQueue)
+        .disableAutoComplete()
+        .processMessage(processMessage)
+        .processError(processError)
+        .buildProcessorClient();
+```
 
 ***How we notice that from logs***
 
@@ -71,15 +86,22 @@ The management node are created twice:
 
 ***Why we see so many different errors***
 
-If we use a queue name to set topic name for sender, the sender can send message successfully as client communicate with the service via entity name and don't need entity type(i.e. queue/topic). 
+If we use a queue name to set topic name for sender, **the sender can send message successfully as client communicate with the service via entity name and don't need entity type(i.e. queue/topic)**. 
 
-However, if we use a shared connection for a sender and a receiver, the incorrectly configuration may cause issues as the service bus client use both entity name and entity type to create management channel.
+However, if we use a shared connection for a sender and a receiver, the incorrectly configuration may cause issues as the **service bus client use both entity name and entity type to create or get management channel.**
+
+```Java
+//ServiceBusReactorAmqpConnection
+public Mono<ServiceBusManagementNode> getManagementNode(String entityPath, MessagingEntityType entityType) 
+```
 
 If we configure two different entity types for one entity name, the client will create two management channels: one for receiver and one for sender. Because the shared connection can only use one management channel to receive service response, if receiver's management channel override the sender's management channel, the schedule message response is received by the receiver's management channel and we can see "Received delivery without pending message." log warning. Because the response can't be consumed by sender's management channel, the sender get stuck until it throw out the schedule message timeout error. 
 
+![](./schedule-timeout-issue.png)
+
 Depends on the process message logic and time, the sender's management channel can be posible to override the receiver's management channel, and in this scenario, because of the renew lock failure, some lock expired errors will be thrown out. We will also see the link remote detached message and transient error 10 minutes after all lock renew task clean up.
 
-TODO: Draw a picture
+
 
 ### Reproduce
 
