@@ -1,6 +1,6 @@
 ## Schedule Message Timeout Error
 
-**Background**
+### Background
 
 User use the shared connection for sender and receiver. They receive messages from the queue and schedule new message to same queue when received message met some conditions.
 
@@ -46,7 +46,7 @@ Warning messsage:
 [reactor-executor-1] WARN  c.a.c.a.i.RequestResponseChannel - {"az.sdk.message":"Received delivery without pending message.","connectionId":"MF_e42b54_1661330246759","linkName":"testqueue-mgmt","messageId":"2"}
 ```
 
-***Reason*** 
+### Reason 
 
 User misconfigure the queue name as the topic name of sender client. 
 
@@ -97,11 +97,13 @@ public Mono<ServiceBusManagementNode> getManagementNode(String entityPath, Messa
 
 If we configure two different entity types for one entity name, the client will create two management channels: one for receiver and one for sender. Because the shared connection can only use one management channel to receive service response, if receiver's management channel override the sender's management channel, the schedule message response is received by the receiver's management channel and we can see "Received delivery without pending message." log warning. Because the response can't be consumed by sender's management channel, the sender get stuck until it throw out the schedule message timeout error. 
 
-![](./schedule-timeout-issue.png)
+![img](./schedule-timeout-issue.png)
+
+- When sender schedule message, it will create management channel 1. When receiver renew message lock, it will create management channel 2. 
+- If receiver process message fast, and don't need renew lock, then no issue, that is why this error sometimes happened.
+- After two managment channel created, sender is still using management channel 1 to schedule message, but the management send link and receive link in the shared connection is replaced by management channel 2. Because the schedule message are saved in `unconfirmedSends` map inside management channel 1, so when management channel 2 receive the ack response, it can't find in its `unconfirmedSends` map and couldn't settle the schedule message.
 
 Depends on the process message logic and time, the sender's management channel can be posible to override the receiver's management channel, and in this scenario, because of the renew lock failure, some lock expired errors will be thrown out. We will also see the link remote detached message and transient error 10 minutes after all lock renew task clean up.
-
-
 
 ### Reproduce
 
@@ -177,8 +179,34 @@ public class ReceiveAndScheduleMessage {
     }
 }
 ```
-#### Logs
+Repro Logs
 
 - [Scenario 1](./scenario-1-log.md)
 - [Scenario 2](./scenario-2-log.md)
 - [Scenario 3](./scenario-3-log.md)
+
+
+#### Lesson learned
+
+Some questions need to be understood in the following order:
+
+1. How many instances, how many clients, are they use shared connection?
+2. Check their client configuration
+    - queue/topic settings
+    - concurrency
+    - renew lock duration 
+    - auto complete 
+    - retry options
+3. Check Log contents
+    - Thread name 
+    - Pod name (in case they merge all pods log in one file)
+    - Time duration (+/- 10 mintues may not be enough)
+
+4. Check their CPU cores, it may have thread pool issue. (Most of user deploy on 1 core pod)
+
+User are not always provide the log as we want, and they may use some other tools to get logs, such as splunk, elastic search. We can give them some log format examples after they provided some log which is not we want.
+
+
+
+
+
