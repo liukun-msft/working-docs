@@ -206,7 +206,10 @@ Some questions need to be understood in the following order:
 
 User are not always provide the log as we want, and they may use some other tools to get logs, such as splunk, elastic search. We can give them some log format examples after they provided some log which is not we want.
 
+#### Possible Enhancement
 
+1. Throw an explict error when user misconfigured.
 
+2. Remove entity type as an identitfier for management channel 
 
 
