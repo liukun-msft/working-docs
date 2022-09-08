@@ -16,13 +16,15 @@ One message got lock expired error when it pass to process message function.
 
 ### Log Analysis
 
+![img](./renew-lock-issue.png)
+
 The message was received but before being passed to the processMessage, it stuck until another message completed and released the thread. 
 
 ### Code Analysis
 
 The call graph for client after receive a message: 
 
-![img](receive-message-calls-graph.png)
+![img](./receive-message-calls-graph.png)
 
 As we can see "There are no credits to add." log just after received message. So the message should hang on `sink(message)` or `publishOn(Schedulers.boundedElastic())`.
 
