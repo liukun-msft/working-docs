@@ -35,16 +35,18 @@ Internally prefetch 1 more messages (One request).
 ![img2](./reactor-fusion-1.png)
 
 
-Operator: `publishOn()`, `limitRate()`
+Some operators like `publishOn()`, `limitRate()` can be fused if the upstream also supported. The operator will prefetch from upstream when downstream `poll()` from the fuseable queue.
 
-**Async drain mode**
+**Async drain()**
+
+
 
 Internally prefetch 2 more messages (Two requests).
 
 ![img3](./reactor-async-mode-1.png)
 
+Some operators like `parallel()`, `publishOn()`, `limitRate()` have async drain() function. The operator will prefetch from upstream after its `onNext()` return.
 
-Operator: `parallel()`, `publishOn()`, `limitRate()`
 
 
 **Possible Solution**
