@@ -31,8 +31,11 @@ Receive 4 messages (prefetch 2 more messages) :
 
 Internally prefetch 1 more messages (One request).
 
+
 ![img2](./reactor-fusion-1.png)
 
+
+Operator: `publishOn()`, `limitRate()`
 
 **Async drain mode**
 
@@ -41,11 +44,11 @@ Internally prefetch 2 more messages (Two requests).
 ![img3](./reactor-async-mode-1.png)
 
 
-ParallelSource, PublishOn, limitRate 
+Operator: `parallel()`, `publishOn()`, `limitRate()`
 
 
-**Solution**
+**Possible Solution**
 
-- Replace `parallel()` by `flatMap()`
+- Replace `parallel()` by `flatMap(...,concurrency)`
 - Customized Reactor Operator 
 
