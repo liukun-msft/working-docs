@@ -74,7 +74,7 @@ Mono<Void> loadBalance(final Tuple2<Map<String, PartitionOwnership>, List<String
 ```
 Because when use blob checkpoint, **`claimOwnership()` will invoke asynchronous calls to blob container** (`blobClient.uploadWithResponse()`,`blobClient.setMetadataWithResponse()`), just after we send out the request, internal `loadBalance()` function returns and we go to `then().repeat(...)` to invoke another `claimOwnership()` call. The blob request use netty and runs on the thread pool `reactor-http-nio`.
 
-Hence, there will be **multiple `claimOwnership()` threads running simultaneously on a processor.** When the processor has finished parsing itself, it is possible that it will receive 412 status code errors.
+Hence, there will be **multiple `claimOwnership()` threads running simultaneously on a processor.** As processor could compete request same parititon with itself, it is possible that it will receive 412 status code errors.
 
 Issue Log:
 ```
