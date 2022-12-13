@@ -123,38 +123,53 @@ public void onNext(ServiceBusReceiveLink next) {
 }
 ```
 
-We will call `checkAndAddCredits()` to add credits for the new link `next`. **However, the `next` link is close for some reason (we need to figure it out), so the `checkAndAddCredits()` throw the "Cannot add credits to closed link" error.** And this error is escaped from `onNext()` function, which breaks the reactor chain with the `onErrorDropped` error. 
-
-Because there is no credits flow to the server side and the reactor chain is broken. The processor stop receiving messages and can't recover.
- 
-### Verify the behavior when an error is thrown from checkAndAddCredits()
-
-We only throw an error for the scenario that we add credits for the new link:
-
 ```Java
 //#ServiceBusReceiveLinkProcessor#checkAndAddCredits
 private void checkAndAddCredits(AmqpReceiveLink link) {
-    ...
-    synchronized (lock) {
-        final int linkCredits = link.getCredits();
-        final int credits = getCreditsToAdd(linkCredits);
-        if (credits > 0) {
-            counter.getAndIncrement();
-            if(counter.get() == 1) {
-                throw new IllegalStateException("Can't add credits"); 
-            } else {
-                link.addCredits(credits).subscribe();
-            }
-        }
+   //... calculate credits
+   link.addCredits(credits).subscribe();
 }
 ```
 
+We will call `checkAndAddCredits()` to add credits for the new link `next`. **However, the `next` link is close for some reason (we need to figure it out), so the when we try to add credit on link, it throw out the "Cannot add credits to closed link" error.**. As we haven't give a error consumer for `addCredit()` in subscriber, reactor will catch that error, and log it as `onErrorDropped` error. 
+
+Because there is no credits flow to the server side, the processor stop receiving messages.
+ 
+### Verify the behavior when an error is thrown from addCredits()
+
+We only throw an error for the scenario that we add credits for the new link, and don't catch that in subscriber:
+
+```Java
+//#ServiceBusReceiveLinkProcessor#checkAndAddCredits
+    private void checkAndAddCredits(AmqpReceiveLink link) {
+        if (link == null) {
+            return;
+        }
+
+        synchronized (lock) {
+            final int linkCredits = link.getCredits();
+            final int credits = getCreditsToAdd(linkCredits);
+            if (credits > 0) {
+                counter.getAndIncrement();
+                if(counter.get() == 1) {
+                    //Here mock the link closed error
+                    Mono.error(new RuntimeException("Can't add credits")).subscribe();
+                } else {
+                    link.addCredits(credits).subscribe();
+                }
+            }
+        }
+    }
+```
+
 ```LOG
-17:01:53.995 [reactor-executor-1] ERROR reactor.core.publisher.Operators - Operator called default onErrorDropped
-java.lang.IllegalStateException: Can't add credits
-	at com.azure.messaging.servicebus.implementation.ServiceBusReceiveLinkProcessor.checkAndAddCredits(ServiceBusReceiveLinkProcessor.java:579)
-	at com.azure.messaging.servicebus.implementation.ServiceBusReceiveLinkProcessor.onNext(ServiceBusReceiveLinkProcessor.java:273)
-	at com.azure.messaging.servicebus.implementation.ServiceBusReceiveLinkProcessor.onNext(ServiceBusReceiveLinkProcessor.java:49)
+14:55:59.075 [reactor-executor-1] DEBUG c.a.m.s.i.ServiceBusReceiveLinkProcessor - {"az.sdk.message":"Adding credits.","prefetch":0,"requested":1,"linkCredits":0,"expectedTotalCredit":1,"queuedMessages":0,"creditsToAdd":1,"messageQueueSize":0}
+14:55:59.075 [reactor-executor-1] ERROR reactor.core.publisher.Operators - Operator called default onErrorDropped
+reactor.core.Exceptions$ErrorCallbackNotImplemented: java.lang.RuntimeException: Can't add credits
+Caused by: java.lang.RuntimeException: Can't add credits
+	at com.azure.messaging.servicebus.implementation.ServiceBusReceiveLinkProcessor.checkAndAddCredits(ServiceBusReceiveLinkProcessor.java:585)
+	at com.azure.messaging.servicebus.implementation.ServiceBusReceiveLinkProcessor.onNext(ServiceBusReceiveLinkProcessor.java:276)
+	at com.azure.messaging.servicebus.implementation.ServiceBusReceiveLinkProcessor.onNext(ServiceBusReceiveLinkProcessor.java:52)
 	at reactor.core.publisher.FluxRepeatPredicate$RepeatPredicateSubscriber.onNext(FluxRepeatPredicate.java:85)
 	at reactor.core.publisher.MonoPeekTerminal$MonoTerminalPeekSubscriber.onNext(MonoPeekTerminal.java:180)
 	at reactor.core.publisher.SerializedSubscriber.onNext(SerializedSubscriber.java:99)
@@ -173,23 +188,44 @@ java.lang.IllegalStateException: Can't add credits
 	at com.azure.core.amqp.implementation.ReactorSession.lambda$createConsumer$11(ReactorSession.java:402)
 	at com.azure.core.amqp.implementation.handler.DispatchHandler.onTimerTask(DispatchHandler.java:32)
 	at com.azure.core.amqp.implementation.ReactorDispatcher$WorkScheduler.run(ReactorDispatcher.java:207)
+	at org.apache.qpid.proton.reactor.impl.SelectableImpl.readable(SelectableImpl.java:118)
+	at org.apache.qpid.proton.reactor.impl.IOHandler.handleQuiesced(IOHandler.java:61)
+	at org.apache.qpid.proton.reactor.impl.IOHandler.onUnhandled(IOHandler.java:390)
+	at org.apache.qpid.proton.engine.BaseHandler.onReactorQuiesced(BaseHandler.java:87)
+	at org.apache.qpid.proton.engine.BaseHandler.handle(BaseHandler.java:206)
+	at org.apache.qpid.proton.engine.impl.EventImpl.dispatch(EventImpl.java:108)
+	at org.apache.qpid.proton.reactor.impl.ReactorImpl.dispatch(ReactorImpl.java:324)
+	at org.apache.qpid.proton.reactor.impl.ReactorImpl.process(ReactorImpl.java:292)
+	at com.azure.core.amqp.implementation.ReactorExecutor.run(ReactorExecutor.java:91)
+	at reactor.core.scheduler.SchedulerTask.call(SchedulerTask.java:68)
+	at reactor.core.scheduler.SchedulerTask.call(SchedulerTask.java:28)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:304)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+	at java.base/java.lang.Thread.run(Thread.java:834)
+14:55:59.075 [reactor-executor-1] DEBUG c.a.m.s.i.ServiceBusReactorAmqpConnection - {"az.sdk.message":"Get or create consumer.","entityPath":"test-topic/subscriptions/test-subscription"}
 ```
-Although the error entrance is different, (here is start from ReactorSession to create a consumer link), we can still verify the processor stop receiving message when `checkAndAddCredits` throw out an error inside `onNext()`.
 
+Although the error entrance is different, (here is start from ReactorSession to create a consumer link), we can still verify the processor stop receiving message when `addCredits()` throw out an error and logged by reactor.
+
+Note: If we explictly throw an error directly inside `checkAndAddCredits`, we also get the similar error, but it doesn't have `ErrorCallbackNotImplemented`, as the error was throw out the `ServiceBusReceiveLinkProcessor#onNext()`. 
+
+```LOG
+17:01:53.995 [reactor-executor-1] ERROR reactor.core.publisher.Operators - Operator called default onErrorDropped
+java.lang.IllegalStateException: Can't add credits
+	at com.azure.messaging.servicebus.implementation.ServiceBusReceiveLinkProcessor.checkAndAddCredits(ServiceBusReceiveLinkProcessor.java:579)
+	at com.azure.messaging.servicebus.implementation.ServiceBusReceiveLinkProcessor.onNext(ServiceBusReceiveLinkProcessor.java:273)
+	at com.azure.messaging.servicebus.implementation.ServiceBusReceiveLinkProcessor.onNext(ServiceBusReceiveLinkProcessor.java:49)
+	at reactor.core.publisher.FluxRepeatPredicate$RepeatPredicateSubscriber.onNext(FluxRepeatPredicate.java:85)
+```
 ### Mitigate the problem
 
 - A Simple Solution  
 
-Surround `checkAndAddCredits()` or all the calls inside `onNext` with try-catch . If any error occurs, call `onError` to retry/restart processor.
+Add a error handler in the subscriber of `addCredit()`
 
-```Java
-try {
-    checkAndAddCredits(next);
-} catch (Exception e) {
-    LOGGER.warning("Add credits to link failure");
-    currentLink = null;
-    onError(e);
-}
-```
 
 ### Why next link is closed when we try to add credits on it? (TODO)
+
+It is possible that link is closing, but cached in session. So session pass a closing link down to the linkProcessor. We need to double check the link status before pass down to linkProcessor's `onNext()`.
