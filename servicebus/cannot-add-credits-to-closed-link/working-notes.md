@@ -226,6 +226,37 @@ java.lang.IllegalStateException: Can't add credits
 Add a error handler in the subscriber of `addCredit()`
 
 
-### Why next link is closed when we try to add credits on it? (TODO)
+### Why next link is closed when we try to add credits on it? 
 
 It is possible that link is closing, but cached in session. So session pass a closing link down to the linkProcessor. We need to double check the link status before pass down to linkProcessor's `onNext()`.
+
+From logs, we could see when linkProcessor request a new link, it got a closed link first, then we create new link. Something wrong with the reactor chain.
+
+```
+11:40:26.066 [reactor-executor-1] DEBUG c.a.c.a.i.handler.ReceiveLinkHandler - {"az.sdk.message":"Could not emit deliveries.close when closing handler.","connectionId":"MF_bb2c2f_1672112412439","entityPath":"test-topic/subscriptions/test-subscription","linkName":"test-topic/subscriptions/test-subscription_735ba0_1672112412498"}
+11:40:26.067 [reactor-executor-1] INFO  c.a.c.a.i.ReactorSession - {"az.sdk.message":"Complete. Removing receive link.","connectionId":"MF_bb2c2f_1672112412439","linkName":"test-topic/subscriptions/test-subscription_735ba0_1672112412498","entityPath":"test-topic/subscriptions/test-subscription"}
+11:40:26.072 [reactor-executor-1] INFO  c.a.m.s.i.ServiceBusReceiveLinkProcessor - Receive link endpoint states are closed. Requesting another.
+11:40:26.072 [reactor-executor-1] INFO  c.a.m.s.i.ServiceBusReceiveLinkProcessor - Requesting a new AmqpReceiveLink from upstream.
+11:40:26.073 [reactor-executor-1] DEBUG c.a.m.s.ServiceBusReceiverAsyncClient - {"az.sdk.message":"Created consumer for Service Bus resource.","linkName":"test-topic/subscriptions/test-subscription_735ba0_1672112412498","entityPath":"test-topic/subscriptions/test-subscription","mode":"PEEK_LOCK","isSessionEnabled":false,"entityType":"SUBSCRIPTION"}
+11:40:26.073 [reactor-executor-1] INFO  c.a.m.s.i.ServiceBusReceiveLinkProcessor - {"az.sdk.message":"Setting next AMQP receive link.","linkName":"test-topic/subscriptions/test-subscription_735ba0_1672112412498","entityPath":"test-topic/subscriptions/test-subscription"}
+11:40:26.075 [reactor-executor-1] DEBUG c.a.m.s.i.ServiceBusReceiveLinkProcessor - {"az.sdk.message":"Adding credits.","prefetch":0,"requested":1,"linkCredits":1,"expectedTotalCredit":1,"queuedMessages":0,"creditsToAdd":0,"messageQueueSize":0}
+11:40:26.076 [boundedElastic-5] INFO  c.a.m.s.i.ServiceBusReceiveLinkProcessor - Receive link endpoint states are closed. Requesting another.
+11:40:26.077 [boundedElastic-5] INFO  c.a.m.s.i.ServiceBusReceiveLinkProcessor - Requesting a new AmqpReceiveLink from upstream.
+11:40:26.077 [reactor-executor-1] DEBUG c.a.m.s.i.ServiceBusReactorAmqpConnection - {"az.sdk.message":"Get or create consumer.","entityPath":"test-topic/subscriptions/test-subscription"}
+11:40:26.077 [reactor-executor-1] DEBUG c.a.c.a.i.AzureTokenManagerProvider - {"az.sdk.message":"Creating new token manager.","audience":"amqp://servicebusliuku.servicebus.windows.net/test-topic/subscriptions/test-subscription","resource":"test-topic/subscriptions/test-subscription"}
+11:40:26.079 [reactor-executor-1] DEBUG c.a.c.a.i.RequestResponseChannel - {"az.sdk.message":"Scheduling on dispatcher.","connectionId":"MF_bb2c2f_1672112412439","linkName":"cbs","messageId":null}
+11:40:26.079 [reactor-executor-1] DEBUG c.a.c.a.i.handler.ReceiveLinkHandler - {"az.sdk.message":"onLinkLocalClose","connectionId":"MF_bb2c2f_1672112412439","errorCondition":null,"errorDescription":null,"linkName":"test-topic/subscriptions/test-subscription_735ba0_1672112412498","entityPath":"test-topic/subscriptions/test-subscription"}
+11:40:26.082 [reactor-executor-1] INFO  c.a.c.a.i.handler.ReceiveLinkHandler - {"az.sdk.message":"onLinkFinal","connectionId":"MF_bb2c2f_1672112412439","linkName":"test-topic/subscriptions/test-subscription_735ba0_1672112412498","entityPath":"test-topic/subscriptions/test-subscription"}
+11:40:26.085 [reactor-executor-1] DEBUG c.a.c.a.i.handler.SendLinkHandler - {"az.sdk.message":"onLinkFlow.","connectionId":"MF_bb2c2f_1672112412439","linkName":"cbs","unsettled":0,"credits":98}
+11:40:26.298 [reactor-executor-1] DEBUG c.a.c.a.i.RequestResponseChannel - {"az.sdk.message":"Settling message.","connectionId":"MF_bb2c2f_1672112412439","linkName":"cbs","messageId":"2"}
+11:40:26.298 [reactor-executor-1] INFO  c.a.c.a.i.ActiveClientTokenManager - {"az.sdk.message":"Scheduling refresh token task.","scopes":"amqp://servicebusliuku.servicebus.windows.net/test-topic/subscriptions/test-subscription"}
+11:40:26.299 [reactor-executor-1] DEBUG c.a.c.a.i.handler.ReceiveLinkHandler - {"az.sdk.message":"onDelivery.","connectionId":"MF_bb2c2f_1672112412439","errorCondition":null,"errorDescription":null,"entityPath":"$cbs","linkName":"cbs","updatedLinkCredit":0,"remoteCredit":0,"delivery.isPartial":false,"delivery.isSettled":false}
+11:40:26.300 [reactor-executor-1] INFO  c.a.c.a.i.ReactorSession - {"az.sdk.message":"Creating a new receiver link.","connectionId":"MF_bb2c2f_1672112412439","sessionName":"test-topic/subscriptions/test-subscription","linkName":"test-topic/subscriptions/test-subscription_735ba0_1672112412498"}
+11:40:26.300 [reactor-executor-1] DEBUG c.a.c.a.i.ReactorReceiver - {"az.sdk.message":"State UNINITIALIZED","connectionId":"MF_bb2c2f_1672112412439","entityPath":"test-topic/subscriptions/test-subscription","linkName":"test-topic/subscriptions/test-subscription_735ba0_1672112412498"}
+11:40:26.300 [reactor-executor-1] DEBUG c.a.c.a.i.ReactorReceiver - {"az.sdk.message":"Token refreshed.","connectionId":"MF_bb2c2f_1672112412439","entityPath":"test-topic/subscriptions/test-subscription","linkName":"test-topic/subscriptions/test-subscription_735ba0_1672112412498","response":"ACCEPTED"}
+11:40:26.301 [reactor-executor-1] DEBUG c.a.m.s.ServiceBusReceiverAsyncClient - {"az.sdk.message":"Created consumer for Service Bus resource.","linkName":"test-topic/subscriptions/test-subscription_735ba0_1672112412498","entityPath":"test-topic/subscriptions/test-subscription","mode":"PEEK_LOCK","isSessionEnabled":false,"entityType":"SUBSCRIPTION"}
+11:40:26.301 [reactor-executor-1] INFO  c.a.m.s.i.ServiceBusReceiveLinkProcessor - {"az.sdk.message":"Setting next AMQP receive link.","linkName":"test-topic/subscriptions/test-subscription_735ba0_1672112412498","entityPath":"test-topic/subscriptions/test-subscription"}
+11:40:26.301 [reactor-executor-1] DEBUG c.a.m.s.i.ServiceBusReceiveLinkProcessor - {"az.sdk.message":"Adding credits.","prefetch":0,"requested":1,"linkCredits":0,"expectedTotalCredit":1,"queuedMessages":0,"creditsToAdd":1,"messageQueueSize":0}
+11:40:26.304 [reactor-executor-1] DEBUG c.a.m.s.i.ServiceBusReactorAmqpConnection - {"az.sdk.message":"Get or create consumer.","entityPath":"test-topic/subscriptions/test-subscription"}
+11:40:26.304 [reactor-executor-1] INFO  c.a.c.a.i.ReactorSession - {"az.sdk.message":"Returning existing receive link.","connectionId":"MF_bb2c2f_1672112412439","linkName":"test-topic/subscriptions/test-subscription_735ba0_1672112412498","entityPath":"test-topic/subscriptions/test-subscription"}
+```
