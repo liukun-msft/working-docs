@@ -36,9 +36,7 @@ Consumer<ServiceBusReceivedMessageContext> processMessage = messageContext -> {
                 messageContext.getMessage().getLockToken(),
                 messageContext.getMessage().getBody());
 
-        // other message processing code
-        TimeUnit.SECONDS.sleep(PROCESS_TIME_IN_SECONDS);
-
+        TimeUnit.SECONDS.sleep(1);
         messageContext.complete();
     } catch (Exception ex) {
         messageContext.abandon();
