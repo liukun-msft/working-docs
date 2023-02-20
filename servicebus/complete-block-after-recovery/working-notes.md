@@ -5,7 +5,7 @@
 
 https://github.com/Azure/azure-sdk-for-java/issues/33493
 
-User find if their network is down for a short period of time, some of their processing threads will block at complete() calls forever.
+User find if their network is down for a short period of time, some of their processing threads will block at `complete()` calls forever.
 
 #### Repro
 
@@ -45,7 +45,7 @@ Consumer<ServiceBusReceivedMessageContext> processMessage = messageContext -> {
 ```
 
 Start the client, we could see 10 threads are processing messages.
-```Java
+```
 Thread name [boundedElastic-1] - received message id [184], message sequence number [2045147] ,  message token [f638967a-9740-42f3-9b62-caae3ac2a788], message content [Hello world] 
 Thread name [boundedElastic-2] - received message id [185], message sequence number [2045148] ,  message token [babe7ed6-5dcd-429f-be11-213019228f17], message content [Hello world] 
 Thread name [boundedElastic-3] - received message id [186], message sequence number [2045149] ,  message token [a3647636-9002-4581-8e02-f302bfb41b91], message content [Hello world] 
@@ -62,7 +62,7 @@ Thread name [boundedElastic-2] - received message id [234], message sequence num
 
 Disconnect the network for few seconds, and we could see the connection is recovered after the 'onTransportError', but **only 7 threads continue to process messages** (the thread number may be different for each test).
 
-```Java
+```
 14:37:22.585 [reactor-executor-1] WARN  com.azure.core.amqp.implementation.handler.ConnectionHandler - {"az.sdk.message":"onTransportError","connectionId":"MF_ac03fc_1676615833511","errorCondition":"proton:io","errorDescription":"An existing connection was forcibly closed by the remote host","hostName":"xxx.servicebus.windows.net"}
 ...
 Thread name [boundedElastic-3] - received message id [236], message sequence number [2045199] ,  message token [6f2547d9-92a6-4680-b9d1-81863199a830], message content [Hello world] 
@@ -82,7 +82,7 @@ Thread name [boundedElastic-9] - received message id [224], message sequence num
 ```
 
 **The other 3 threads are blocking at complete() calls, even if we wait until the internal timeout.**
-```Java
+```
 "boundedElastic-1@2675" daemon prio=5 tid=0x1d nid=NA waiting
   java.lang.Thread.State: WAITING
 	  at jdk.internal.misc.Unsafe.park(Unsafe.java:-1)
@@ -96,9 +96,9 @@ Thread name [boundedElastic-9] - received message id [224], message sequence num
 	  at com.azure.messaging.servicebus.ServiceBusReceivedMessageContext.complete(ServiceBusReceivedMessageContext.java:81)
 ```
 
-#### Reason
+### Reason
 
-The internal timeout we set for the `complete()/abandon()` are removed when link is closed completely. So when connection is recovering, threads those are blocked in `complete()/abandon()` calls will wait forever after the old receive link is closed.
+**_The internal timeout we set for the `complete()/abandon()` are removed when link is closed completely. So when connection is recovering, threads those are blocked in `complete()/abandon()` calls will wait forever after the old receive link is closed._**
 
 ### Code Analysis
 
@@ -140,7 +140,8 @@ private void cleanupWorkItems() {
         ...
         final Throwable error = value.getLastException() != null
             ? value.getLastException()
-            : new AmqpException(true, AmqpErrorCondition.TIMEOUT_ERROR, "Update disposition request timed out.",...);
+            : new AmqpException(true, AmqpErrorCondition.TIMEOUT_ERROR, 
+            "Update disposition request timed out.",...);
 
         completeWorkItem(key, null, value.getSink(), error);
     });
