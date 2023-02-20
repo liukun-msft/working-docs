@@ -225,6 +225,9 @@ protected Mono<Void> closeAsync(String message, ErrorCondition errorCondition) {
     .then(...);
 }
 ```
+#### Logic Diagram
+
+![img](./threads-hanging-on-complete-calls-issue.png)
 
 ### Solution
 
